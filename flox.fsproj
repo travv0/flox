@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Extensions.fs" />
     <Compile Include="Error.fs" />
-    <Compile Include="TokenType.fs" />
     <Compile Include="Token.fs" />
     <Compile Include="Scanner.fs" />
     <Compile Include="Lox.fs" />

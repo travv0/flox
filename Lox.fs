@@ -1,23 +1,22 @@
-﻿open Error
-open System
+﻿open System
 open System.IO
 
 module Lox =
-    open Scanner
-
     let run source =
-        let scanner = Scanner(source)
-        let tokens = scanner.ScanTokens()
+        let tokens =
+            Scanner.make source |> Scanner.scanTokens
 
         // For now, just print the tokens.
         for token in tokens do
             printfn "%O" token
 
+        printfn ""
+
     let runFile path =
         File.ReadAllText path |> run
 
         // Indicate an error in the exit code.
-        if hadError () then exit 65
+        if Error.occurred () then exit 65
 
     let rec runPrompt () =
         printf "> "
@@ -25,7 +24,7 @@ module Lox =
         match Console.ReadLine() |> Option.ofObj with
         | Some line ->
             run line
-            resetError ()
+            Error.reset ()
             runPrompt ()
         | None -> ()
 

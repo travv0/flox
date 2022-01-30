@@ -3,206 +3,157 @@ module Scanner
 open System
 
 open Error
+open Extensions
 open Token
 
-open type TokenType.TokenType
+type Scanner =
+    { Source: list<char>
+      Line: int
+      Tokens: list<Token> }
 
-type Scanner(source: string) =
-    let tokens = ResizeArray()
+let keywords =
+    Map.ofList [ "and", And
+                 "class", Class
+                 "else", Else
+                 "false", False
+                 "fun", Fun
+                 "for", For
+                 "if", If
+                 "nil", Nil
+                 "or", Or
+                 "print", Print
+                 "return", Return
+                 "super", Super
+                 "this", This
+                 "true", True
+                 "var", Var
+                 "while", While ]
 
-    let mutable start = 0
-    let mutable current = 0
-    let mutable line = 1
+let make source =
+    { Source = source |> List.ofSeq
+      Line = 1
+      Tokens = [] }
 
-    let keywords =
-        Map.ofList [ "and", And
-                     "class", Class
-                     "else", Else
-                     "false", False
-                     "fun", Fun
-                     "for", For
-                     "if", If
-                     "nil", Nil
-                     "or", Or
-                     "print", Print
-                     "return", Return
-                     "super", Super
-                     "this", This
-                     "true", True
-                     "var", Var
-                     "while", While ]
+let private addToken ({ Line = line; Source = source } as scanner) token newSource tokenLength =
+    let text =
+        List.take tokenLength source |> String.ofSeq
 
-    member this.ScanTokens() =
-        while not (this.IsAtEnd()) do
-            // We are at the beginning of the next lexeme.
-            start <- current
-            this.ScanToken()
-
-        tokens.Add(
-            { Type = Eof
-              Lexeme = ""
-              Literal = None
+    { scanner with
+        Source = newSource
+        Tokens =
+            { Type = token
+              Lexeme = text
               Line = line }
-        )
+            :: scanner.Tokens }
 
-        tokens
+let private scanIdentifier ({ Source = source } as scanner) =
+    // Get the first character of the identifier.
+    let ident, rest = List.splitAt 1 source
 
-    member private this.ScanToken() =
-        let c = this.Advance()
+    let ident, rest =
+        List.splitWhile (fun c -> c = '_' || Char.IsLetterOrDigit(c)) rest
+        |> (fun (i, r) -> (ident @ i, r))
 
-        match c with
-        | '(' -> this.AddToken LeftParen
-        | ')' -> this.AddToken RightParen
-        | '{' -> this.AddToken LeftBrace
-        | '}' -> this.AddToken RightBrace
-        | ',' -> this.AddToken Comma
-        | '.' -> this.AddToken Dot
-        | '-' -> this.AddToken Minus
-        | '+' -> this.AddToken Plus
-        | ';' -> this.AddToken Semicolon
-        | '*' -> this.AddToken Star
-        | '!' ->
-            this.AddToken(
-                if this.Match('=') then
-                    BangEqual
-                else
-                    Bang
-            )
-        | '=' ->
-            this.AddToken(
-                if this.Match('=') then
-                    EqualEqual
-                else
-                    Equal
-            )
-        | '<' ->
-            this.AddToken(
-                if this.Match('=') then
-                    LessEqual
-                else
-                    Less
-            )
-        | '>' ->
-            this.AddToken(
-                if this.Match('=') then
-                    GreaterEqual
-                else
-                    Greater
-            )
-        | '/' ->
-            if this.Match('/') then
-                // A comment goes until the end of the line.
-                while this.Peek() <> Some '\n' && not (this.IsAtEnd()) do
-                    this.Advance() |> ignore
-            else
-                this.AddToken(Slash)
+    let text = String.ofSeq ident
 
-        | ' '
-        | '\r'
-        | '\t' ->
-            // Ignore whitespace.
-            ()
-
-        | '\n' -> line <- line + 1
-
-        | '"' -> this.String()
-
-        | c when Char.IsDigit(c) -> this.Number()
-        | c when Char.IsLetter(c) || c = '_' -> this.Identifier()
-
-        | _ -> error line "Unexpected character."
-
-    member private this.Identifier() =
-        let isSomeLetterOrDigit =
-            function
-            | Some c -> Char.IsLetterOrDigit(c) || c = '_'
-            | None -> false
-
-        while isSomeLetterOrDigit (this.Peek()) do
-            this.Advance() |> ignore
-
-        let text = source.Substring(start, current - start)
-
+    let tokenType =
         match Map.tryFind text keywords with
         | Some t -> t
-        | None -> Identifier
-        |> this.AddToken
+        | None -> Identifier text
 
-    member private this.Number() =
-        let isSomeDigit =
-            function
-            | Some c -> Char.IsDigit(c)
-            | None -> false
+    addToken scanner tokenType rest (List.length ident)
 
-        while isSomeDigit (this.Peek()) do
-            this.Advance() |> ignore
+let private scanNumber ({ Source = source } as scanner) =
+    let num, rest = List.splitWhile Char.IsDigit source
 
-        // Look for a fractional part.
-        if
-            this.Peek() = Some '.'
-            && isSomeDigit (this.PeekNext())
-        then
-            // Consume the "."
-            this.Advance() |> ignore
+    // Look for a fractional part.
+    let num, rest =
+        match rest with
+        | '.' :: c :: rest when Char.IsDigit(c) ->
+            let cs, rest = List.splitWhile Char.IsDigit rest
+            num @ '.' :: c :: cs, rest
+        | _ -> num, rest
 
-            while isSomeDigit (this.Peek()) do
-                this.Advance() |> ignore
+    addToken scanner (Number(num |> String.ofSeq |> float)) rest (List.length num)
 
-        this.AddToken(Number, Double.Parse(source.Substring(start, current - start)))
+let private scanString ({ Source = source; Line = line } as scanner) =
+    let str, rest =
+        source |> List.tail |> List.splitWhile ((<>) '"')
 
-    member private this.String() =
-        while this.Peek() <> Some '"' && not (this.IsAtEnd()) do
-            if this.Peek() = Some '\n' then
-                line <- line + 1
+    // Update the line number if the string had newlines.
+    let line =
+        line
+        + (str |> Seq.filter ((=) '\n') |> Seq.length)
 
-            this.Advance() |> ignore
+    match rest with
+    | [] ->
+        error line "Unterminated string."
 
-        if this.IsAtEnd() then
-            error line "Unterminated string."
-        else
-            // The closing ".
-            this.Advance() |> ignore
+        { scanner with
+            Line = line
+            Source = [] }
+    | _ ->
+        let scanner =
+            addToken scanner (String(String.ofSeq str)) rest (List.length str + 2)
 
-            // Trim the surrounding quotes.
-            let value =
-                source.Substring(start + 1, current - 1 - start)
+        { scanner with
+            Line = line
+            Source = List.tail scanner.Source }
 
-            this.AddToken(String, value)
+let private scanToken =
+    function
+    | { Source = source; Line = line } as scanner ->
+        match source with
+        | '(' :: source -> addToken scanner LeftParen source 1
+        | ')' :: source -> addToken scanner RightParen source 1
+        | '{' :: source -> addToken scanner LeftBrace source 1
+        | '}' :: source -> addToken scanner RightBrace source 1
+        | ',' :: source -> addToken scanner Comma source 1
+        | '.' :: source -> addToken scanner Dot source 1
+        | '-' :: source -> addToken scanner Minus source 1
+        | '+' :: source -> addToken scanner Plus source 1
+        | ';' :: source -> addToken scanner Semicolon source 1
+        | '*' :: source -> addToken scanner Star source 1
+        | '!' :: '=' :: source -> addToken scanner BangEqual source 2
+        | '!' :: source -> addToken scanner Bang source 1
+        | '=' :: '=' :: source -> addToken scanner EqualEqual source 2
+        | '=' :: source -> addToken scanner Equal source 1
+        | '<' :: '=' :: source -> addToken scanner LessEqual source 2
+        | '<' :: source -> addToken scanner Less source 1
+        | '>' :: '=' :: source -> addToken scanner GreaterEqual source 2
+        | '>' :: source -> addToken scanner Greater source 1
+        | '/' :: '/' :: source ->
+            // A comment goes until the end of the Line.
+            { scanner with Source = source |> List.skipWhile ((<>) '\n') }
+        | '/' :: source -> addToken scanner Slash source 1
 
-    member private this.Match(expected) =
-        if this.IsAtEnd() then
-            false
-        elif source.[current] <> expected then
-            false
-        else
-            current <- current + 1
-            true
+        | ' ' :: source
+        | '\r' :: source
+        | '\t' :: source ->
+            // Ignore whitespace.
+            { scanner with Source = source }
 
-    member private this.Peek() =
-        if this.IsAtEnd() then
-            None
-        else
-            Some(source.[current])
+        | '\n' :: source ->
+            { scanner with
+                Line = scanner.Line + 1
+                Source = source }
 
-    member private _.PeekNext() =
-        if current + 1 >= String.length source then
-            None
-        else
-            Some(source.[current + 1])
+        | '"' :: _ -> scanString scanner
 
-    member private _.IsAtEnd() = current >= String.length source
+        | c :: source when Char.IsDigit(c) -> scanNumber scanner
+        | c :: source when Char.IsLetter(c) || c = '_' -> scanIdentifier scanner
 
-    member private _.Advance() =
-        let c = source.[current]
-        current <- current + 1
-        c
+        | c :: source ->
+            error line $"Unexpected character: '%c{c}'"
+            { scanner with Source = source }
 
-    member private _.AddToken(type_, ?literal: obj) =
-        let text = source.Substring(start, current - start)
+        | _ -> failwith "scanToken: no more tokens"
 
-        tokens.Add(
-            { Type = type_
-              Lexeme = text
-              Literal = literal
-              Line = line }
-        )
+let rec scanTokens =
+    function
+    | { Source = []
+        Tokens = tokens
+        Line = line } ->
+        { Type = Eof; Lexeme = ""; Line = line } :: tokens
+        |> List.rev
+    | scanner -> scanToken scanner |> scanTokens

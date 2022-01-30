@@ -1,20 +1,55 @@
 module Token
 
-open TokenType
+type TokenType =
+    // Single-character tokens.
+    | LeftParen
+    | RightParen
+    | LeftBrace
+    | RightBrace
+    | Comma
+    | Dot
+    | Minus
+    | Plus
+    | Semicolon
+    | Slash
+    | Star
 
-type Literal = option<obj>
+    // One or two character tokens.
+    | Bang
+    | BangEqual
+    | Equal
+    | EqualEqual
+    | Greater
+    | GreaterEqual
+    | Less
+    | LessEqual
 
-module Literal =
-    let toString =
-        function
-        | Some l -> l.ToString()
-        | None -> "null"
+    // Literals.
+    | Identifier of string
+    | String of string
+    | Number of float
+
+    // Keywords.
+    | And
+    | Class
+    | Else
+    | False
+    | Fun
+    | For
+    | If
+    | Nil
+    | Or
+    | Print
+    | Return
+    | Super
+    | This
+    | True
+    | Var
+    | While
+
+    | Eof
 
 type Token =
     { Type: TokenType
       Lexeme: string
-      Literal: Literal
       Line: int }
-
-    override this.ToString() =
-        $"%O{this.Type} %s{this.Lexeme} %O{Literal.toString this.Literal}"
