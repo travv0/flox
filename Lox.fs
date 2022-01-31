@@ -1,38 +1,42 @@
-﻿open System
+﻿module Lox
+
+open System
 open System.IO
 
-module Lox =
-    let run source =
-        let tokens =
-            Scanner.make source |> Scanner.scanTokens
+open Error
+open Parser
 
-        // For now, just print the tokens.
-        for token in tokens do
-            printfn "%O" token
+let run source =
+    let tokens =
+        Scanner.make source |> Scanner.scanTokens
 
-        printfn ""
+    let parser = Parser(tokens)
+    let expression = parser.Parse()
 
-    let runFile path =
-        File.ReadAllText path |> run
+    if not (Error.Occurred()) then
+        printfn "%A\n" expression
 
-        // Indicate an error in the exit code.
-        if Error.occurred () then exit 65
+let runFile path =
+    File.ReadAllText path |> run
 
-    let rec runPrompt () =
-        printf "> "
+    // Indicate an error in the exit code.
+    if Error.Occurred() then exit 65
 
-        match Console.ReadLine() |> Option.ofObj with
-        | Some line ->
-            run line
-            Error.reset ()
-            runPrompt ()
-        | None -> ()
+let rec runPrompt () =
+    printf "> "
+
+    match Console.ReadLine() |> Option.ofObj with
+    | Some line ->
+        run line
+        Error.Reset()
+        runPrompt ()
+    | None -> ()
 
 [<EntryPoint>]
 let main args =
     match args with
-    | [||] -> Lox.runPrompt ()
-    | [| file |] -> Lox.runFile file
+    | [||] -> runPrompt ()
+    | [| file |] -> runFile file
     | _ ->
         printfn "Usage: flox [script]"
         exit 64

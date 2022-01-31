@@ -34,7 +34,7 @@ let make source =
       Line = 1
       Tokens = [] }
 
-let private addToken ({ Line = line; Source = source } as scanner) token newSource tokenLength =
+let private addToken ({ Line = line; Source = source } as scanner) token literal newSource tokenLength =
     let text =
         List.take tokenLength source |> String.ofSeq
 
@@ -43,6 +43,7 @@ let private addToken ({ Line = line; Source = source } as scanner) token newSour
         Tokens =
             { Type = token
               Lexeme = text
+              Literal = Option.toObj literal
               Line = line }
             :: scanner.Tokens }
 
@@ -59,9 +60,9 @@ let private scanIdentifier ({ Source = source } as scanner) =
     let tokenType =
         match Map.tryFind text keywords with
         | Some t -> t
-        | None -> Identifier text
+        | None -> Identifier
 
-    addToken scanner tokenType rest (List.length ident)
+    addToken scanner tokenType (Some text) rest (List.length ident)
 
 let private scanNumber ({ Source = source } as scanner) =
     let num, rest = List.splitWhile Char.IsDigit source
@@ -74,7 +75,7 @@ let private scanNumber ({ Source = source } as scanner) =
             num @ '.' :: c :: cs, rest
         | _ -> num, rest
 
-    addToken scanner (Number(num |> String.ofSeq |> float)) rest (List.length num)
+    addToken scanner Number (num |> String.ofSeq |> float |> box |> Some) rest (List.length num)
 
 let private scanString ({ Source = source; Line = line } as scanner) =
     let str, rest =
@@ -87,14 +88,14 @@ let private scanString ({ Source = source; Line = line } as scanner) =
 
     match rest with
     | [] ->
-        error line "Unterminated string."
+        Error.Report(line, "Unterminated string.")
 
         { scanner with
             Line = line
             Source = [] }
     | _ ->
         let scanner =
-            addToken scanner (String(String.ofSeq str)) rest (List.length str + 2)
+            addToken scanner String (Some(String.ofSeq str)) rest (List.length str + 2)
 
         { scanner with
             Line = line
@@ -104,28 +105,28 @@ let private scanToken =
     function
     | { Source = source; Line = line } as scanner ->
         match source with
-        | '(' :: source -> addToken scanner LeftParen source 1
-        | ')' :: source -> addToken scanner RightParen source 1
-        | '{' :: source -> addToken scanner LeftBrace source 1
-        | '}' :: source -> addToken scanner RightBrace source 1
-        | ',' :: source -> addToken scanner Comma source 1
-        | '.' :: source -> addToken scanner Dot source 1
-        | '-' :: source -> addToken scanner Minus source 1
-        | '+' :: source -> addToken scanner Plus source 1
-        | ';' :: source -> addToken scanner Semicolon source 1
-        | '*' :: source -> addToken scanner Star source 1
-        | '!' :: '=' :: source -> addToken scanner BangEqual source 2
-        | '!' :: source -> addToken scanner Bang source 1
-        | '=' :: '=' :: source -> addToken scanner EqualEqual source 2
-        | '=' :: source -> addToken scanner Equal source 1
-        | '<' :: '=' :: source -> addToken scanner LessEqual source 2
-        | '<' :: source -> addToken scanner Less source 1
-        | '>' :: '=' :: source -> addToken scanner GreaterEqual source 2
-        | '>' :: source -> addToken scanner Greater source 1
+        | '(' :: source -> addToken scanner LeftParen None source 1
+        | ')' :: source -> addToken scanner RightParen None source 1
+        | '{' :: source -> addToken scanner LeftBrace None source 1
+        | '}' :: source -> addToken scanner RightBrace None source 1
+        | ',' :: source -> addToken scanner Comma None source 1
+        | '.' :: source -> addToken scanner Dot None source 1
+        | '-' :: source -> addToken scanner Minus None source 1
+        | '+' :: source -> addToken scanner Plus None source 1
+        | ';' :: source -> addToken scanner Semicolon None source 1
+        | '*' :: source -> addToken scanner Star None source 1
+        | '!' :: '=' :: source -> addToken scanner BangEqual None source 2
+        | '!' :: source -> addToken scanner Bang None source 1
+        | '=' :: '=' :: source -> addToken scanner EqualEqual None source 2
+        | '=' :: source -> addToken scanner Equal None source 1
+        | '<' :: '=' :: source -> addToken scanner LessEqual None source 2
+        | '<' :: source -> addToken scanner Less None source 1
+        | '>' :: '=' :: source -> addToken scanner GreaterEqual None source 2
+        | '>' :: source -> addToken scanner Greater None source 1
         | '/' :: '/' :: source ->
             // A comment goes until the end of the Line.
             { scanner with Source = source |> List.skipWhile ((<>) '\n') }
-        | '/' :: source -> addToken scanner Slash source 1
+        | '/' :: source -> addToken scanner Slash None source 1
 
         | ' ' :: source
         | '\r' :: source
@@ -140,11 +141,11 @@ let private scanToken =
 
         | '"' :: _ -> scanString scanner
 
-        | c :: source when Char.IsDigit(c) -> scanNumber scanner
-        | c :: source when Char.IsLetter(c) || c = '_' -> scanIdentifier scanner
+        | c :: _ when Char.IsDigit(c) -> scanNumber scanner
+        | c :: _ when Char.IsLetter(c) || c = '_' -> scanIdentifier scanner
 
         | c :: source ->
-            error line $"Unexpected character: '%c{c}'"
+            Error.Report(line, $"Unexpected character: '%c{c}'")
             { scanner with Source = source }
 
         | _ -> failwith "scanToken: no more tokens"
@@ -154,6 +155,10 @@ let rec scanTokens =
     | { Source = []
         Tokens = tokens
         Line = line } ->
-        { Type = Eof; Lexeme = ""; Line = line } :: tokens
+        { Type = Eof
+          Lexeme = ""
+          Literal = null
+          Line = line }
+        :: tokens
         |> List.rev
     | scanner -> scanToken scanner |> scanTokens

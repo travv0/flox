@@ -25,9 +25,9 @@ type TokenType =
     | LessEqual
 
     // Literals.
-    | Identifier of string
-    | String of string
-    | Number of float
+    | Identifier
+    | String
+    | Number
 
     // Keywords.
     | And
@@ -52,4 +52,5 @@ type TokenType =
 type Token =
     { Type: TokenType
       Lexeme: string
+      Literal: obj
       Line: int }
