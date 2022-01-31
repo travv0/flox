@@ -21,25 +21,25 @@ let private consume tokens type_ message =
 let private synchronize tokens : list<Token> =
     let isStatementStart token =
         match token.Type with
-        | Class
-        | Fun
-        | Var
-        | For
-        | If
-        | While
-        | Print
-        | Return -> true
+        | TokenType.Class
+        | TokenType.Fun
+        | TokenType.Var
+        | TokenType.For
+        | TokenType.If
+        | TokenType.While
+        | TokenType.Print
+        | TokenType.Return -> true
         | _ -> false
 
     let rest =
         List.skipWhile
             (fun token ->
-                token.Type <> Semicolon
+                token.Type <> TokenType.Semicolon
                 && not (isStatementStart token))
             tokens
 
     match rest with
-    | { Type = Semicolon } :: rest -> rest
+    | { Type = TokenType.Semicolon } :: rest -> rest
     | _ -> rest
 
 module private Grammar =
@@ -49,14 +49,16 @@ module private Grammar =
 
     and primary: list<Token> -> ParseResult =
         function
-        | { Type = False } :: rest -> Literal(false), rest
-        | { Type = True } :: rest -> Literal(true), rest
-        | { Type = Nil } :: rest -> Literal(null), rest
-        | { Type = type_; Literal = literal } :: rest when List.contains type_ [ Number; String ] ->
-            Literal(literal), rest
-        | { Type = LeftParen } :: rest ->
+        | { Type = TokenType.False } :: rest -> Literal(Bool false), rest
+        | { Type = TokenType.True } :: rest -> Literal(Bool true), rest
+        | { Type = TokenType.Nil } :: rest -> Literal Nil, rest
+        | { Type = TokenType.String
+            Literal = literal } :: rest -> Literal(String(literal :?> string)), rest
+        | { Type = TokenType.Number
+            Literal = literal } :: rest -> Literal(Number(literal :?> float)), rest
+        | { Type = TokenType.LeftParen } :: rest ->
             let expr, rest = expression rest
-            Grouping(expr), consume rest RightParen "Expect ')' after expression."
+            Grouping(expr), consume rest TokenType.RightParen "Expect ')' after expression."
         | token :: _ -> raise <| parseError token "Expect expression."
         | _ ->
             raise
@@ -64,7 +66,7 @@ module private Grammar =
 
     and unary: list<Token> -> ParseResult =
         function
-        | operator :: rest when List.contains operator.Type [ Bang; Minus ] ->
+        | operator :: rest when List.contains operator.Type [ TokenType.Bang; TokenType.Minus ] ->
             let expr, rest = expression rest
             Unary(operator, expr), rest
         | token -> primary token
@@ -80,20 +82,25 @@ module private Grammar =
         let expr, rest = nextPrec tokens
         go expr rest
 
-    and factor = binary unary [ Slash; Star ]
+    and factor =
+        binary unary [ TokenType.Slash; TokenType.Star ]
 
-    and term = binary factor [ Minus; Plus ]
+    and term =
+        binary factor [ TokenType.Minus; TokenType.Plus ]
 
     and comparison =
         binary
             term
-            [ Greater
-              GreaterEqual
-              Less
-              LessEqual ]
+            [ TokenType.Greater
+              TokenType.GreaterEqual
+              TokenType.Less
+              TokenType.LessEqual ]
 
     and equality =
-        binary comparison [ BangEqual; EqualEqual ]
+        binary
+            comparison
+            [ TokenType.BangEqual
+              TokenType.EqualEqual ]
 
 let parse tokens =
     try

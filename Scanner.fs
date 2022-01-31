@@ -12,22 +12,22 @@ type Scanner =
       Tokens: list<Token> }
 
 let keywords =
-    Map.ofList [ "and", And
-                 "class", Class
-                 "else", Else
-                 "false", False
-                 "fun", Fun
-                 "for", For
-                 "if", If
-                 "nil", Nil
-                 "or", Or
-                 "print", Print
-                 "return", Return
-                 "super", Super
-                 "this", This
-                 "true", True
-                 "var", Var
-                 "while", While ]
+    Map.ofList [ "and", TokenType.And
+                 "class", TokenType.Class
+                 "else", TokenType.Else
+                 "false", TokenType.False
+                 "fun", TokenType.Fun
+                 "for", TokenType.For
+                 "if", TokenType.If
+                 "nil", TokenType.Nil
+                 "or", TokenType.Or
+                 "print", TokenType.Print
+                 "return", TokenType.Return
+                 "super", TokenType.Super
+                 "this", TokenType.This
+                 "true", TokenType.True
+                 "var", TokenType.Var
+                 "while", TokenType.While ]
 
 let make source =
     { Source = source |> List.ofSeq
@@ -60,7 +60,7 @@ let private scanIdentifier ({ Source = source } as scanner) =
     let tokenType =
         match Map.tryFind text keywords with
         | Some t -> t
-        | None -> Identifier
+        | None -> TokenType.Identifier
 
     addToken scanner tokenType (Some text) rest (List.length ident)
 
@@ -75,7 +75,7 @@ let private scanNumber ({ Source = source } as scanner) =
             num @ '.' :: c :: cs, rest
         | _ -> num, rest
 
-    addToken scanner Number (num |> String.ofSeq |> float |> box |> Some) rest (List.length num)
+    addToken scanner TokenType.Number (num |> String.ofSeq |> float |> box |> Some) rest (List.length num)
 
 let private scanString ({ Source = source; Line = line } as scanner) =
     let str, rest =
@@ -95,7 +95,7 @@ let private scanString ({ Source = source; Line = line } as scanner) =
             Source = [] }
     | _ ->
         let scanner =
-            addToken scanner String (Some(String.ofSeq str)) rest (List.length str + 2)
+            addToken scanner TokenType.String (Some(String.ofSeq str)) rest (List.length str + 2)
 
         { scanner with
             Line = line
@@ -105,28 +105,28 @@ let private scanToken =
     function
     | { Source = source; Line = line } as scanner ->
         match source with
-        | '(' :: source -> addToken scanner LeftParen None source 1
-        | ')' :: source -> addToken scanner RightParen None source 1
-        | '{' :: source -> addToken scanner LeftBrace None source 1
-        | '}' :: source -> addToken scanner RightBrace None source 1
-        | ',' :: source -> addToken scanner Comma None source 1
-        | '.' :: source -> addToken scanner Dot None source 1
-        | '-' :: source -> addToken scanner Minus None source 1
-        | '+' :: source -> addToken scanner Plus None source 1
-        | ';' :: source -> addToken scanner Semicolon None source 1
-        | '*' :: source -> addToken scanner Star None source 1
-        | '!' :: '=' :: source -> addToken scanner BangEqual None source 2
-        | '!' :: source -> addToken scanner Bang None source 1
-        | '=' :: '=' :: source -> addToken scanner EqualEqual None source 2
-        | '=' :: source -> addToken scanner Equal None source 1
-        | '<' :: '=' :: source -> addToken scanner LessEqual None source 2
-        | '<' :: source -> addToken scanner Less None source 1
-        | '>' :: '=' :: source -> addToken scanner GreaterEqual None source 2
-        | '>' :: source -> addToken scanner Greater None source 1
+        | '(' :: source -> addToken scanner TokenType.LeftParen None source 1
+        | ')' :: source -> addToken scanner TokenType.RightParen None source 1
+        | '{' :: source -> addToken scanner TokenType.LeftBrace None source 1
+        | '}' :: source -> addToken scanner TokenType.RightBrace None source 1
+        | ',' :: source -> addToken scanner TokenType.Comma None source 1
+        | '.' :: source -> addToken scanner TokenType.Dot None source 1
+        | '-' :: source -> addToken scanner TokenType.Minus None source 1
+        | '+' :: source -> addToken scanner TokenType.Plus None source 1
+        | ';' :: source -> addToken scanner TokenType.Semicolon None source 1
+        | '*' :: source -> addToken scanner TokenType.Star None source 1
+        | '!' :: '=' :: source -> addToken scanner TokenType.BangEqual None source 2
+        | '!' :: source -> addToken scanner TokenType.Bang None source 1
+        | '=' :: '=' :: source -> addToken scanner TokenType.EqualEqual None source 2
+        | '=' :: source -> addToken scanner TokenType.Equal None source 1
+        | '<' :: '=' :: source -> addToken scanner TokenType.LessEqual None source 2
+        | '<' :: source -> addToken scanner TokenType.Less None source 1
+        | '>' :: '=' :: source -> addToken scanner TokenType.GreaterEqual None source 2
+        | '>' :: source -> addToken scanner TokenType.Greater None source 1
         | '/' :: '/' :: source ->
             // A comment goes until the end of the Line.
             { scanner with Source = source |> List.skipWhile ((<>) '\n') }
-        | '/' :: source -> addToken scanner Slash None source 1
+        | '/' :: source -> addToken scanner TokenType.Slash None source 1
 
         | ' ' :: source
         | '\r' :: source

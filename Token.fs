@@ -1,5 +1,6 @@
 module Token
 
+[<RequireQualifiedAccess>]
 type TokenType =
     // Single-character tokens.
     | LeftParen
@@ -56,7 +57,7 @@ type Token =
       Line: int }
 
 let eof line =
-    { Type = Eof
+    { Type = TokenType.Eof
       Lexeme = ""
       Literal = null
       Line = line }

@@ -1,6 +1,7 @@
 module Error
 
 open Token
+open Expr
 
 let mutable _hadError = false
 
@@ -15,7 +16,10 @@ type Error() =
     static member Report(line, message) = report line "" message
 
     static member Report(token: Token, message) =
-        if token.Type = Eof then
+        if token.Type = TokenType.Eof then
             report token.Line " at end" message
         else
             report token.Line $" at '%s{token.Lexeme}'" message
+
+    static member TypeError(value: Literal, expected, line: int) =
+        report line $" at '%O{value}'" $"Expect %s{expected}"

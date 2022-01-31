@@ -9,10 +9,13 @@ let run source =
     let tokens =
         Scanner.make source |> Scanner.scanTokens
 
-    let expression = Parser.parse tokens
+    match Parser.parse tokens with
+    | Some expression ->
+        let result = Interpreter.evaluate expression
 
-    if not (Error.Occurred()) then
-        printfn "%A\n" expression
+        if not (Error.Occurred()) then
+            printfn "%O\n" result
+    | None -> ()
 
 let runFile path =
     File.ReadAllText path |> run
@@ -25,7 +28,11 @@ let rec runPrompt () =
 
     match Console.ReadLine() |> Option.ofObj with
     | Some line ->
-        run line
+        try
+            run line
+        with
+        | Interpreter.TypeError -> ()
+
         Error.Reset()
         runPrompt ()
     | None -> ()
