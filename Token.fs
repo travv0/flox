@@ -54,3 +54,9 @@ type Token =
       Lexeme: string
       Literal: obj
       Line: int }
+
+let eof line =
+    { Type = Eof
+      Lexeme = ""
+      Literal = null
+      Line = line }

@@ -154,11 +154,5 @@ let rec scanTokens =
     function
     | { Source = []
         Tokens = tokens
-        Line = line } ->
-        { Type = Eof
-          Lexeme = ""
-          Literal = null
-          Line = line }
-        :: tokens
-        |> List.rev
+        Line = line } -> eof line :: tokens |> List.rev
     | scanner -> scanToken scanner |> scanTokens

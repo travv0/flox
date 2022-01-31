@@ -4,14 +4,12 @@ open System
 open System.IO
 
 open Error
-open Parser
 
 let run source =
     let tokens =
         Scanner.make source |> Scanner.scanTokens
 
-    let parser = Parser(tokens)
-    let expression = parser.Parse()
+    let expression = Parser.parse tokens
 
     if not (Error.Occurred()) then
         printfn "%A\n" expression
