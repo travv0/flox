@@ -1,5 +1,7 @@
 module Interpreter
 
+open System
+
 open Token
 open Expr
 open Error
@@ -10,13 +12,12 @@ let isTruthy =
     | Bool v -> v
     | _ -> true
 
-exception TypeError
+exception RuntimeError of Literal * string * int
 
-let typeError expected value line =
-    Error.TypeError(value, expected, line)
-    raise TypeError
+let runtimeError expected value line =
+    raise <| RuntimeError(value, expected, line)
 
-let rec evaluate =
+let rec private evaluate =
     function
     | Literal v -> v
 
@@ -25,7 +26,7 @@ let rec evaluate =
     | Unary ({ Type = TokenType.Minus; Line = line }, expr) ->
         match evaluate expr with
         | Number n -> Number -n
-        | v -> typeError "number" v line
+        | v -> runtimeError "number" v line
 
     | Unary ({ Type = TokenType.Bang }, expr) ->
         let right = evaluate expr
@@ -35,19 +36,24 @@ let rec evaluate =
         match evaluate left, evaluate right with
         | Number left, Number right -> Number(left + right)
         | String left, String right -> String(left + right)
-        | Number _, badRight -> typeError "number" badRight line
-        | String _, badRight -> typeError "string" badRight line
+        | Number _, badRight -> runtimeError "number" badRight line
+        | String _, badRight -> runtimeError "string" badRight line
         | badLeft, Number _
-        | badLeft, String _ -> typeError "number or string" badLeft line
-        | _, badRight -> typeError "number or string" badRight line
+        | badLeft, String _ -> runtimeError "number or string" badLeft line
+        | _, badRight -> runtimeError "number or string" badRight line
 
     | Binary (left, { Type = TokenType.BangEqual }, right) ->
         let left, right = evaluate left, evaluate right
         Bool(left <> right)
 
     | Binary (left, { Type = TokenType.EqualEqual }, right) ->
+        let equal left right =
+            match left, right with
+            | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
+            | _ -> left = right
+
         let left, right = evaluate left, evaluate right
-        Bool(left = right)
+        Bool(equal left right)
 
     | Binary (left, token, right) ->
         match evaluate left, evaluate right with
@@ -61,7 +67,13 @@ let rec evaluate =
             | TokenType.Less -> Bool(left < right)
             | TokenType.LessEqual -> Bool(left <= right)
             | _ -> failwith "unreachable"
-        | badLeft, Number _ -> typeError "number" badLeft token.Line
-        | _, badRight -> typeError "number" badRight token.Line
+        | badLeft, Number _ -> runtimeError "number" badLeft token.Line
+        | _, badRight -> runtimeError "number" badRight token.Line
 
     | _ -> failwith "unreachable"
+
+let interpret expression =
+    try
+        expression |> evaluate |> printfn "%O"
+    with
+    | RuntimeError (value, expected, line) -> RuntimeError.Report(value, expected, line)

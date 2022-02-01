@@ -3,15 +3,18 @@ module Error
 open Token
 open Expr
 
-let mutable _hadError = false
-
-let report line where message =
+let printError line where message =
     printfn $"[line %d{line}] Error%s{where}: %s{message}"
-    _hadError <- true
 
 type Error() =
-    static member Occurred() = _hadError
-    static member Reset() = _hadError <- false
+    static let mutable hadError = false
+
+    static let report line where message =
+        printError line where message
+        hadError <- true
+
+    static member Occurred() = hadError
+    static member Reset() = hadError <- false
 
     static member Report(line, message) = report line "" message
 
@@ -21,5 +24,15 @@ type Error() =
         else
             report token.Line $" at '%s{token.Lexeme}'" message
 
-    static member TypeError(value: Literal, expected, line: int) =
+type RuntimeError() =
+    static let mutable hadError = false
+
+    static let report line where message =
+        printError line where message
+        hadError <- true
+
+    static member Occurred() = hadError
+    static member Reset() = hadError <- false
+
+    static member Report(value: Literal, expected, line: int) =
         report line $" at '%O{value}'" $"Expect %s{expected}"
