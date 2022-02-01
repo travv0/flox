@@ -26,9 +26,9 @@ type TokenType =
     | LessEqual
 
     // Literals.
-    | Identifier
-    | String
-    | Number
+    | Identifier of string
+    | String of string
+    | Number of float
 
     // Keywords.
     | And
@@ -53,11 +53,9 @@ type TokenType =
 type Token =
     { Type: TokenType
       Lexeme: string
-      Literal: obj
       Line: int }
 
 let eof line =
     { Type = TokenType.Eof
       Lexeme = ""
-      Literal = null
       Line = line }

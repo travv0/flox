@@ -52,10 +52,8 @@ module private Grammar =
         | { Type = TokenType.False } :: rest -> Literal(Bool false), rest
         | { Type = TokenType.True } :: rest -> Literal(Bool true), rest
         | { Type = TokenType.Nil } :: rest -> Literal Nil, rest
-        | { Type = TokenType.String
-            Literal = literal } :: rest -> Literal(String(literal :?> string)), rest
-        | { Type = TokenType.Number
-            Literal = literal } :: rest -> Literal(Number(literal :?> float)), rest
+        | { Type = TokenType.String s } :: rest -> Literal(String s), rest
+        | { Type = TokenType.Number n } :: rest -> Literal(Number n), rest
         | { Type = TokenType.LeftParen } :: rest ->
             let expr, rest = expression rest
             Grouping(expr), consume rest TokenType.RightParen "Expect ')' after expression."
@@ -66,17 +64,23 @@ module private Grammar =
 
     and unary: list<Token> -> ParseResult =
         function
-        | operator :: rest when List.contains operator.Type [ TokenType.Bang; TokenType.Minus ] ->
+        | ({ Type = TokenType.Bang } as operator) :: rest ->
             let expr, rest = primary rest
-            Unary(operator, expr), rest
+            Unary(operator, Bang, expr), rest
+        | ({ Type = TokenType.Minus } as operator) :: rest ->
+            let expr, rest = primary rest
+            Unary(operator, Minus, expr), rest
         | token -> primary token
 
     and binary nextPrec opTokens tokens : ParseResult =
         let rec go expr =
             function
             | operator :: rest when List.contains operator.Type opTokens ->
-                let right, rest = nextPrec rest
-                go (Binary(expr, operator, right)) rest
+                match BinaryOp.ofToken operator with
+                | Some op ->
+                    let right, rest = nextPrec rest
+                    go (Binary(operator, expr, op, right)) rest
+                | None -> expr, operator :: rest
             | rest -> expr, rest
 
         let expr, rest = nextPrec tokens

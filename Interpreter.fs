@@ -6,7 +6,12 @@ open Token
 open Expr
 open Error
 
-let isTruthy =
+let private equal left right =
+    match left, right with
+    | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
+    | _ -> left = right
+
+let private isTruthy =
     function
     | Nil -> false
     | Bool v -> v
@@ -14,7 +19,7 @@ let isTruthy =
 
 exception RuntimeError of Literal * string * int
 
-let runtimeError expected value line =
+let private runtimeError expected value line =
     raise <| RuntimeError(value, expected, line)
 
 let rec private evaluate =
@@ -23,54 +28,53 @@ let rec private evaluate =
 
     | Grouping expr -> evaluate expr
 
-    | Unary ({ Type = TokenType.Minus; Line = line }, expr) ->
+    | Unary ({ Line = line }, Minus, expr) ->
         match evaluate expr with
         | Number n -> Number -n
         | v -> runtimeError "number" v line
 
-    | Unary ({ Type = TokenType.Bang }, expr) ->
+    | Unary (_, Bang, expr) ->
         let right = evaluate expr
         Bool(not (isTruthy right))
 
-    | Binary (left, { Type = TokenType.Plus; Line = line }, right) ->
-        match evaluate left, evaluate right with
-        | Number left, Number right -> Number(left + right)
-        | String left, String right -> String(left + right)
-        | Number _, badRight -> runtimeError "number" badRight line
-        | String _, badRight -> runtimeError "string" badRight line
-        | badLeft, Number _
-        | badLeft, String _ -> runtimeError "number or string" badLeft line
-        | _, badRight -> runtimeError "number or string" badRight line
+    | Binary ({ Line = line }, left, op, right) ->
+        match evaluate left, op, evaluate right with
+        | Number left, BinaryOp.Minus, Number right -> Number(left - right)
+        | Number left, Slash, Number right -> Number(left / right)
+        | Number left, Star, Number right -> Number(left * right)
 
-    | Binary (left, { Type = TokenType.BangEqual }, right) ->
-        let left, right = evaluate left, evaluate right
-        Bool(left <> right)
+        | Number _, BinaryOp.Minus, badRight
+        | Number _, Slash, badRight
+        | Number _, Star, badRight -> runtimeError "number" badRight line
 
-    | Binary (left, { Type = TokenType.EqualEqual }, right) ->
-        let equal left right =
-            match left, right with
-            | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
-            | _ -> left = right
+        | badLeft, BinaryOp.Minus, _
+        | badLeft, Slash, _
+        | badLeft, Star, _ -> runtimeError "number" badLeft line
 
-        let left, right = evaluate left, evaluate right
-        Bool(equal left right)
+        | Number left, Plus, Number right -> Number(left + right)
+        | String left, Plus, String right -> String(left + right)
 
-    | Binary (left, token, right) ->
-        match evaluate left, evaluate right with
-        | Number left, Number right ->
-            match token.Type with
-            | TokenType.Minus -> Number(left - right)
-            | TokenType.Slash -> Number(left / right)
-            | TokenType.Star -> Number(left * right)
-            | TokenType.Greater -> Bool(left > right)
-            | TokenType.GreaterEqual -> Bool(left >= right)
-            | TokenType.Less -> Bool(left < right)
-            | TokenType.LessEqual -> Bool(left <= right)
-            | _ -> failwith "unreachable"
-        | badLeft, Number _ -> runtimeError "number" badLeft token.Line
-        | _, badRight -> runtimeError "number" badRight token.Line
+        | Number _, Plus, badRight -> runtimeError "number" badRight line
+        | String _, Plus, badRight -> runtimeError "string" badRight line
+        | badLeft, Plus, _ -> runtimeError "number or string" badLeft line
 
-    | _ -> failwith "unreachable"
+        | Number left, Greater, Number right -> Bool(left > right)
+        | Number left, GreaterEqual, Number right -> Bool(left >= right)
+        | Number left, Less, Number right -> Bool(left < right)
+        | Number left, LessEqual, Number right -> Bool(left <= right)
+
+        | Number _, Greater, badRight
+        | Number _, GreaterEqual, badRight
+        | Number _, Less, badRight
+        | Number _, LessEqual, badRight -> runtimeError "number" badRight line
+
+        | badLeft, Greater, _
+        | badLeft, GreaterEqual, _
+        | badLeft, Less, _
+        | badLeft, LessEqual, _ -> runtimeError "number" badLeft line
+
+        | left, BangEqual, right -> Bool(left <> right)
+        | left, EqualEqual, right -> Bool(equal left right)
 
 let interpret expression =
     try
