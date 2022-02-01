@@ -67,7 +67,7 @@ module private Grammar =
     and unary: list<Token> -> ParseResult =
         function
         | operator :: rest when List.contains operator.Type [ TokenType.Bang; TokenType.Minus ] ->
-            let expr, rest = expression rest
+            let expr, rest = primary rest
             Unary(operator, expr), rest
         | token -> primary token
 
