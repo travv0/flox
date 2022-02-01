@@ -1,4 +1,4 @@
-module Expr
+module Ast
 
 open Token
 
@@ -81,3 +81,7 @@ type Expr =
     | Unary of Token * UnaryOp * Expr
     | Literal of Literal
     | Grouping of Expr
+
+type Stmt =
+    | Expression of Expr
+    | Print of Expr

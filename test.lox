@@ -1,6 +1,6 @@
-(1 + 2 * 3 + (1 + 2) * 3 + 1 + (2 * 3))/69 > 1 + ((23.5 * 2) / 5) - -3213213;
-"cat" != "c
+print (1 + 2 * 3 + (1 + 2) * 3 + 1 + (2 * 3))/69 > 1 + ((23.5 * 2) / 5) - -3213213;
+print "cat" != "c
 at";
-less < than; // comment
-1 == 2;
-print asdfklj
+print "one";
+print true;
+print 2 + 1;

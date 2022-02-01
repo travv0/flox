@@ -2,7 +2,7 @@ module Parser
 
 open Error
 open Token
-open Expr
+open Ast
 
 exception ParseError
 
@@ -21,12 +21,12 @@ let private consume tokens type_ message =
 let private synchronize tokens : list<Token> =
     let isStatementStart token =
         match token.Type with
-        | TokenType.Class
-        | TokenType.Fun
-        | TokenType.Var
-        | TokenType.For
-        | TokenType.If
-        | TokenType.While
+        | Class
+        | Fun
+        | Var
+        | For
+        | If
+        | While
         | TokenType.Print
         | TokenType.Return -> true
         | _ -> false
@@ -39,18 +39,32 @@ let private synchronize tokens : list<Token> =
             tokens
 
     match rest with
-    | { Type = TokenType.Semicolon } :: rest -> rest
+    | { Type = Semicolon } :: rest -> rest
     | _ -> rest
 
 module private Grammar =
-    type ParseResult = Expr * list<Token>
+    type StmtResult = Stmt * list<Token>
+    type ExprResult = Expr * list<Token>
 
-    let rec expression tokens : ParseResult = equality tokens
+    let rec statement tokens : StmtResult =
+        match tokens with
+        | { Type = TokenType.Print } :: rest -> printStatement rest
+        | _ -> expressionStatement tokens
 
-    and primary: list<Token> -> ParseResult =
+    and printStatement tokens : StmtResult =
+        let value, rest = expression tokens
+        Stmt.Print(value), consume rest Semicolon "Expect ';' after value."
+
+    and expressionStatement tokens : StmtResult =
+        let expr, rest = expression tokens
+        Stmt.Expression(expr), consume rest Semicolon "Expect ';' after expression."
+
+    and expression tokens : ExprResult = equality tokens
+
+    and primary: list<Token> -> ExprResult =
         function
-        | { Type = TokenType.False } :: rest -> Literal(Bool false), rest
-        | { Type = TokenType.True } :: rest -> Literal(Bool true), rest
+        | { Type = False } :: rest -> Literal(Bool false), rest
+        | { Type = True } :: rest -> Literal(Bool true), rest
         | { Type = TokenType.Nil } :: rest -> Literal Nil, rest
         | { Type = TokenType.String s } :: rest -> Literal(String s), rest
         | { Type = TokenType.Number n } :: rest -> Literal(Number n), rest
@@ -62,7 +76,7 @@ module private Grammar =
             raise
             <| parseError (eof 0) "Unexpected end of file."
 
-    and unary: list<Token> -> ParseResult =
+    and unary: list<Token> -> ExprResult =
         function
         | ({ Type = TokenType.Bang } as operator) :: rest ->
             let expr, rest = primary rest
@@ -72,7 +86,7 @@ module private Grammar =
             Unary(operator, Minus, expr), rest
         | token -> primary token
 
-    and binary nextPrec opTokens tokens : ParseResult =
+    and binary nextPrec opTokens tokens : ExprResult =
         let rec go expr =
             function
             | operator :: rest when List.contains operator.Type opTokens ->
@@ -107,11 +121,14 @@ module private Grammar =
               TokenType.EqualEqual ]
 
 let parse tokens =
+    let rec go (tokens: list<Token>) =
+        match tokens with
+        | [ { Type = Eof } ] -> []
+        | _ ->
+            let stmt, rest = Grammar.statement tokens
+            stmt :: go rest
+
     try
-        tokens
-        |> List.ofSeq
-        |> Grammar.expression
-        |> fst
-        |> Some
+        tokens |> List.ofSeq |> go |> Some
     with
     | ParseError -> None

@@ -3,7 +3,7 @@ module Interpreter
 open System
 
 open Token
-open Expr
+open Ast
 open Error
 
 let private equal left right =
@@ -76,8 +76,14 @@ let rec private evaluate =
         | left, BangEqual, right -> Bool(left <> right)
         | left, EqualEqual, right -> Bool(equal left right)
 
-let interpret expression =
+let private execute =
+    function
+    | Expression expr -> evaluate expr |> ignore
+    | Print expr -> evaluate expr |> printfn "%O"
+
+let interpret statements =
     try
-        expression |> evaluate |> printfn "%O"
+        for statement in statements do
+            execute statement
     with
     | RuntimeError (value, expected, line) -> RuntimeError.Report(value, expected, line)

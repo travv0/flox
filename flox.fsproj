@@ -7,7 +7,7 @@
 
   <ItemGroup>
     <Compile Include="Token.fs" />
-    <Compile Include="Expr.fs" />
+    <Compile Include="Ast.fs" />
 
     <Compile Include="Extensions.fs" />
     <Compile Include="Error.fs" />

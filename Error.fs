@@ -1,7 +1,7 @@
 module Error
 
 open Token
-open Expr
+open Ast
 
 let printError line where message =
     printfn $"[line %d{line}] Error%s{where}: %s{message}"
@@ -19,7 +19,7 @@ type Error() =
     static member Report(line, message) = report line "" message
 
     static member Report(token: Token, message) =
-        if token.Type = TokenType.Eof then
+        if token.Type = Eof then
             report token.Line " at end" message
         else
             report token.Line $" at '%s{token.Lexeme}'" message

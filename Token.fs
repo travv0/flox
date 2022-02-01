@@ -1,6 +1,5 @@
 module Token
 
-[<RequireQualifiedAccess>]
 type TokenType =
     // Single-character tokens.
     | LeftParen
