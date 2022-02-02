@@ -77,6 +77,7 @@ type UnaryOp =
     | Bang
 
 type Expr =
+    | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal

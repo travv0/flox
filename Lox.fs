@@ -10,6 +10,7 @@ let run source =
         Scanner.make source |> Scanner.scanTokens
 
     Parser.parse tokens
+    |> Option.map (List.choose id)
     |> Option.iter Interpreter.interpret
 
 let runFile path =

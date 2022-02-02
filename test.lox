@@ -1,6 +1,9 @@
-print (1 + 2 * 3 + (1 + 2) * 3 + 1 + (2 * 3))/69 > 1 + ((23.5 * 2) / 5) - -3213213;
+var test = (1 + 2 * 3 + (1 + 2) * 3 + 1 + (2 * 3))/69;
 print "cat" != "c
 at";
 print "one";
+print test;
 print true;
-print 2 + 1;
+print 2 + 1 - test;
+test = 2;
+print test;

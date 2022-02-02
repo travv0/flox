@@ -32,6 +32,10 @@ let rec private evaluate =
         | Some v -> v
         | None -> Nil
 
+    | Assign (token, expr) ->
+        evaluate expr
+        |> Environment.assign environment token
+
     | Grouping expr -> evaluate expr
 
     | Unary (({ Line = line }, Minus), expr) ->

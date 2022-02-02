@@ -32,7 +32,8 @@ let private synchronize tokens : list<Token> =
     let rest =
         List.skipWhile
             (fun token ->
-                token.Type <> TokenType.Semicolon
+                token.Type <> TokenType.Eof
+                && token.Type <> TokenType.Semicolon
                 && not (isStatementStart token))
             tokens
 
@@ -44,16 +45,16 @@ module private Grammar =
     type StmtResult = Stmt * list<Token>
     type ExprResult = Expr * list<Token>
 
-    let rec declaration tokens : StmtResult =
+    let rec declaration tokens =
         try
             match tokens with
-            | { Type = TokenType.Var } :: rest -> varDeclaration rest
-            | _ -> statement tokens
+            | { Type = TokenType.Var } :: rest -> varDeclaration rest |> fun (a, b) -> Some a, b
+            | _ -> statement tokens |> fun (a, b) -> Some a, b
         with
-        | ParseError -> synchronize tokens |> declaration
+        | ParseError -> None, synchronize tokens
 
-    and varDeclaration =
-        function
+    and varDeclaration tokens : StmtResult =
+        match tokens with
         | ({ Type = Identifier } as token) :: { Type = Equal } :: rest ->
             let initializer, rest = expression rest
             Stmt.Var(token, Some initializer), consume rest Semicolon "Expect ';' after variable declaration"
@@ -63,8 +64,6 @@ module private Grammar =
         | _ ->
             raise
             <| parseError (eof 0) "Unexpected end of file."
-
-
 
     and statement tokens : StmtResult =
         match tokens with
@@ -79,10 +78,26 @@ module private Grammar =
         let expr, rest = expression tokens
         Stmt.Expression(expr), consume rest Semicolon "Expect ';' after expression."
 
-    and expression tokens : ExprResult = equality tokens
+    and expression tokens : ExprResult = assignment tokens
 
-    and primary: list<Token> -> ExprResult =
-        function
+    and assignment tokens : ExprResult =
+        let expr, rest = equality tokens
+
+        match rest with
+        | ({ Type = Equal } as equals) :: rest ->
+            let value, rest = assignment rest
+
+            match expr with
+            | Variable v -> Expr.Assign(v, value), rest
+            | _ ->
+                parseError equals "Invalid assignment target"
+                |> ignore
+
+                expr, rest
+        | _ -> expr, rest
+
+    and primary tokens : ExprResult =
+        match tokens with
         | { Type = False } :: rest -> Literal(Bool false), rest
         | { Type = True } :: rest -> Literal(Bool true), rest
         | { Type = TokenType.Nil } :: rest -> Literal Nil, rest
@@ -97,8 +112,8 @@ module private Grammar =
             raise
             <| parseError (eof 0) "Unexpected end of file."
 
-    and unary: list<Token> -> ExprResult =
-        function
+    and unary tokens : ExprResult =
+        match tokens with
         | ({ Type = TokenType.Bang } as operator) :: rest ->
             let expr, rest = primary rest
             Unary((operator, Bang), expr), rest
