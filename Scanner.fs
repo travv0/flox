@@ -59,7 +59,7 @@ let private scanIdentifier ({ Source = source } as scanner) =
     let tokenType =
         match Map.tryFind text keywords with
         | Some t -> t
-        | None -> Identifier text
+        | None -> Identifier
 
     addToken scanner tokenType rest (List.length ident)
 

@@ -4,8 +4,6 @@ open Error
 open Token
 open Ast
 
-exception ParseError
-
 let private parseError (token: Token) message =
     Error.Report(token, message)
     ParseError
@@ -21,12 +19,12 @@ let private consume tokens type_ message =
 let private synchronize tokens : list<Token> =
     let isStatementStart token =
         match token.Type with
-        | Class
-        | Fun
-        | Var
-        | For
-        | If
-        | While
+        | TokenType.Class
+        | TokenType.Fun
+        | TokenType.Var
+        | TokenType.For
+        | TokenType.If
+        | TokenType.While
         | TokenType.Print
         | TokenType.Return -> true
         | _ -> false
@@ -46,7 +44,29 @@ module private Grammar =
     type StmtResult = Stmt * list<Token>
     type ExprResult = Expr * list<Token>
 
-    let rec statement tokens : StmtResult =
+    let rec declaration tokens : StmtResult =
+        try
+            match tokens with
+            | { Type = TokenType.Var } :: rest -> varDeclaration rest
+            | _ -> statement tokens
+        with
+        | ParseError -> synchronize tokens |> declaration
+
+    and varDeclaration =
+        function
+        | ({ Type = Identifier } as token) :: { Type = Equal } :: rest ->
+            let initializer, rest = expression rest
+            Stmt.Var(token, Some initializer), consume rest Semicolon "Expect ';' after variable declaration"
+        | ({ Type = Identifier } as token) :: rest ->
+            Stmt.Var(token, None), consume rest Semicolon "Expect ';' after variable declaration"
+        | token :: _ -> raise <| parseError token "Expect variable name."
+        | _ ->
+            raise
+            <| parseError (eof 0) "Unexpected end of file."
+
+
+
+    and statement tokens : StmtResult =
         match tokens with
         | { Type = TokenType.Print } :: rest -> printStatement rest
         | _ -> expressionStatement tokens
@@ -68,6 +88,7 @@ module private Grammar =
         | { Type = TokenType.Nil } :: rest -> Literal Nil, rest
         | { Type = TokenType.String s } :: rest -> Literal(String s), rest
         | { Type = TokenType.Number n } :: rest -> Literal(Number n), rest
+        | ({ Type = TokenType.Identifier } as token) :: rest -> Variable token, rest
         | { Type = TokenType.LeftParen } :: rest ->
             let expr, rest = expression rest
             Grouping(expr), consume rest TokenType.RightParen "Expect ')' after expression."
@@ -80,10 +101,10 @@ module private Grammar =
         function
         | ({ Type = TokenType.Bang } as operator) :: rest ->
             let expr, rest = primary rest
-            Unary(operator, Bang, expr), rest
+            Unary((operator, Bang), expr), rest
         | ({ Type = TokenType.Minus } as operator) :: rest ->
             let expr, rest = primary rest
-            Unary(operator, Minus, expr), rest
+            Unary((operator, Minus), expr), rest
         | token -> primary token
 
     and binary nextPrec opTokens tokens : ExprResult =
@@ -93,7 +114,7 @@ module private Grammar =
                 match BinaryOp.ofToken operator with
                 | Some op ->
                     let right, rest = nextPrec rest
-                    go (Binary(operator, expr, op, right)) rest
+                    go (Binary(expr, (operator, op), right)) rest
                 | None -> expr, operator :: rest
             | rest -> expr, rest
 
@@ -125,7 +146,7 @@ let parse tokens =
         match tokens with
         | [ { Type = Eof } ] -> []
         | _ ->
-            let stmt, rest = Grammar.statement tokens
+            let stmt, rest = Grammar.declaration tokens
             stmt :: go rest
 
     try

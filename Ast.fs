@@ -77,11 +77,13 @@ type UnaryOp =
     | Bang
 
 type Expr =
-    | Binary of Token * Expr * BinaryOp * Expr
-    | Unary of Token * UnaryOp * Expr
+    | Binary of Expr * (Token * BinaryOp) * Expr
+    | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal
+    | Variable of Token
     | Grouping of Expr
 
 type Stmt =
     | Expression of Expr
     | Print of Expr
+    | Var of Token * option<Expr>

@@ -3,6 +3,11 @@ module Error
 open Token
 open Ast
 
+[<AutoOpen>]
+module Exceptions =
+    exception ParseError
+    exception RuntimeError of option<Literal> * string * int
+
 let printError line where message =
     printfn $"[line %d{line}] Error%s{where}: %s{message}"
 
@@ -34,5 +39,5 @@ type RuntimeError() =
     static member Occurred() = hadError
     static member Reset() = hadError <- false
 
-    static member Report(value: Literal, expected, line: int) =
-        report line $" at '%O{value}'" $"Expect %s{expected}"
+    static member Report(value: Literal, message, line: int) = report line $" at '%O{value}'" message
+    static member Report(message, line: int) = report line "" message

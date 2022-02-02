@@ -25,7 +25,7 @@ type TokenType =
     | LessEqual
 
     // Literals.
-    | Identifier of string
+    | Identifier
     | String of string
     | Number of float
 
