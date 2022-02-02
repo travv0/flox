@@ -5,7 +5,7 @@ open Ast
 
 [<AutoOpen>]
 module Exceptions =
-    exception ParseError
+    exception ParseError of list<Token>
     exception RuntimeError of option<Literal> * string * int
 
 let printError line where message =

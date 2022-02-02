@@ -16,6 +16,11 @@ type Literal =
         | Number n -> string n
         | Nil -> "nil"
 
+    member this.Display() =
+        match this with
+        | String s -> $"%s{s}"
+        | v -> v.ToString()
+
 type BinaryOp =
     | Plus
     | BangEqual

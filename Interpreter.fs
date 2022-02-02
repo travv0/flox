@@ -21,7 +21,7 @@ let private isTruthy =
 
 let private runtimeError expected value line =
     raise
-    <| RuntimeError(Some value, $"Expect %s{expected}", line)
+    <| RuntimeError(Some value, $"Expect %s{expected}.", line)
 
 let rec private evaluate =
     function
@@ -89,7 +89,9 @@ let rec private evaluate =
 let private execute =
     function
     | Expression expr -> evaluate expr |> ignore
-    | Print expr -> evaluate expr |> printfn "%O"
+    | Print expr ->
+        evaluate expr
+        |> fun v -> v.Display() |> printfn "%s"
     | Var (token, binding) ->
         binding
         |> Option.map evaluate

@@ -4,17 +4,17 @@ open Error
 open Token
 open Ast
 
-let private parseError (token: Token) message =
+let private parseError (token: Token) tokens message =
     Error.Report(token, message)
-    ParseError
+    ParseError(tokens)
 
 let private consume tokens type_ message =
     match tokens with
     | token :: rest when token.Type = type_ -> rest
-    | token :: _ -> raise <| parseError token message
+    | token :: rest -> raise <| parseError token rest message
     | _ ->
         raise
-        <| parseError (eof 0) "Unexpected end of file."
+        <| parseError (eof 0) tokens "Unexpected end of file."
 
 let private synchronize tokens : list<Token> =
     let isStatementStart token =
@@ -51,19 +51,21 @@ module private Grammar =
             | { Type = TokenType.Var } :: rest -> varDeclaration rest |> fun (a, b) -> Some a, b
             | _ -> statement tokens |> fun (a, b) -> Some a, b
         with
-        | ParseError -> None, synchronize tokens
+        | ParseError rest -> None, synchronize rest
 
     and varDeclaration tokens : StmtResult =
         match tokens with
         | ({ Type = Identifier } as token) :: { Type = Equal } :: rest ->
             let initializer, rest = expression rest
-            Stmt.Var(token, Some initializer), consume rest Semicolon "Expect ';' after variable declaration"
+            Stmt.Var(token, Some initializer), consume rest Semicolon "Expect ';' after variable declaration."
         | ({ Type = Identifier } as token) :: rest ->
-            Stmt.Var(token, None), consume rest Semicolon "Expect ';' after variable declaration"
-        | token :: _ -> raise <| parseError token "Expect variable name."
+            Stmt.Var(token, None), consume rest Semicolon "Expect ';' after variable declaration."
+        | token :: rest ->
+            raise
+            <| parseError token rest "Expect variable name."
         | _ ->
             raise
-            <| parseError (eof 0) "Unexpected end of file."
+            <| parseError (eof 0) tokens "Unexpected end of file."
 
     and statement tokens : StmtResult =
         match tokens with
@@ -90,7 +92,7 @@ module private Grammar =
             match expr with
             | Variable v -> Expr.Assign(v, value), rest
             | _ ->
-                parseError equals "Invalid assignment target"
+                parseError equals rest "Invalid assignment target"
                 |> ignore
 
                 expr, rest
@@ -107,10 +109,12 @@ module private Grammar =
         | { Type = TokenType.LeftParen } :: rest ->
             let expr, rest = expression rest
             Grouping(expr), consume rest TokenType.RightParen "Expect ')' after expression."
-        | token :: _ -> raise <| parseError token "Expect expression."
+        | token :: rest ->
+            raise
+            <| parseError token rest "Expect expression."
         | _ ->
             raise
-            <| parseError (eof 0) "Unexpected end of file."
+            <| parseError (eof 0) tokens "Unexpected end of file."
 
     and unary tokens : ExprResult =
         match tokens with
@@ -159,16 +163,14 @@ module private Grammar =
 let parse tokens =
     let rec go (tokens: list<Token>) =
         match tokens with
+        | [] -> []
         | [ { Type = Eof } ] -> []
         | _ ->
             let stmt, rest = Grammar.declaration tokens
             stmt :: go rest
 
-    try
-        tokens
-        |> List.ofSeq
-        |> go
-        |> List.choose id
-        |> Some
-    with
-    | ParseError -> None
+    tokens
+    |> List.ofSeq
+    |> go
+    |> List.choose id
+    |> Some
