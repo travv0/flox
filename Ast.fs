@@ -93,3 +93,4 @@ type Stmt =
     | Expression of Expr
     | Print of Expr
     | Var of Token * option<Expr>
+    | Block of List<Stmt>

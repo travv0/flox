@@ -6,7 +6,7 @@ open Token
 open Ast
 open Error
 
-let private environment = Environment.make ()
+type Environment = Environment.Environment
 
 let private equal left right =
     match left, right with
@@ -23,32 +23,30 @@ let private runtimeError expected value line =
     raise
     <| RuntimeError(Some value, $"Expect %s{expected}.", line)
 
-let rec private evaluate =
+let rec private evaluate (env: list<Environment>) =
     function
     | Literal v -> v
 
     | Variable token ->
-        match Environment.get environment token with
+        match Environment.get env token with
         | Some v -> v
         | None -> Nil
 
-    | Assign (token, expr) ->
-        evaluate expr
-        |> Environment.assign environment token
+    | Assign (token, expr) -> evaluate env expr |> Environment.assign env token
 
-    | Grouping expr -> evaluate expr
+    | Grouping expr -> evaluate env expr
 
     | Unary (({ Line = line }, Minus), expr) ->
-        match evaluate expr with
+        match evaluate env expr with
         | Number n -> Number -n
         | v -> runtimeError "number" v line
 
     | Unary ((_, Bang), expr) ->
-        let right = evaluate expr
+        let right = evaluate env expr
         Bool(not (isTruthy right))
 
     | Binary (left, ({ Line = line }, op), right) ->
-        match evaluate left, op, evaluate right with
+        match evaluate env left, op, evaluate env right with
         | Number left, BinaryOp.Minus, Number right -> Number(left - right)
         | Number left, Slash, Number right -> Number(left / right)
         | Number left, Star, Number right -> Number(left * right)
@@ -86,21 +84,28 @@ let rec private evaluate =
         | left, BangEqual, right -> Bool(left <> right)
         | left, EqualEqual, right -> Bool(equal left right)
 
-let private execute =
+let rec private execute (env: list<Environment>) =
     function
-    | Expression expr -> evaluate expr |> ignore
+    | Expression expr -> evaluate env expr |> ignore
     | Print expr ->
-        evaluate expr
+        evaluate env expr
         |> fun v -> v.Display() |> printfn "%s"
     | Var (token, binding) ->
         binding
-        |> Option.map evaluate
-        |> Environment.define environment token
+        |> Option.map (evaluate env)
+        |> Environment.define env token
+    | Block statements ->
+        let env = Environment.make () :: env
+
+        for statement in statements do
+            execute env statement
 
 let interpret statements =
+    let env = Environment.make ()
+
     try
         for statement in statements do
-            execute statement
+            execute [ env ] statement
     with
     | RuntimeError (value, expected, line) ->
         match value with

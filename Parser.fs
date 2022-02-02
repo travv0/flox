@@ -70,7 +70,20 @@ module private Grammar =
     and statement tokens : StmtResult =
         match tokens with
         | { Type = TokenType.Print } :: rest -> printStatement rest
+        | { Type = TokenType.LeftBrace } :: rest -> block rest
         | _ -> expressionStatement tokens
+
+    and block tokens : StmtResult =
+        let statements = ResizeArray()
+        let mutable rest = tokens
+
+        while rest.Head.Type <> RightBrace
+              && rest.Head.Type <> Eof do
+            let decl, r = declaration rest
+            decl |> Option.iter statements.Add
+            rest <- r
+
+        Stmt.Block(statements |> List.ofSeq), consume rest RightBrace "Expect '}' after block."
 
     and printStatement tokens : StmtResult =
         let value, rest = expression tokens

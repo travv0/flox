@@ -5,6 +5,7 @@ open Ast
 
 [<AutoOpen>]
 module Exceptions =
+    exception FatalError of string
     exception ParseError of list<Token>
     exception RuntimeError of option<Literal> * string * int
 

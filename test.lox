@@ -1,9 +1,23 @@
-var test = (1 + 2 * 3 + (1 + 2) * 3 + 1 + (2 * 3))/69;
-print "cat" != "c
-at";
-print "one";
-print test;
-print true;
-print 2 + 1 - test;
-test = 2;
-print test;
+var a = "global a";
+var b = "global b";
+var c = "global c";
+{
+  var a = "outer a";
+  var d = "outer d";
+  {
+    var a = "inner a";
+    var d = "inner d";
+    print a;
+    print b;
+    print c;
+    print d;
+  }
+  print a;
+  print b;
+  print c;
+  print d;
+}
+print a;
+print b;
+print c;
+print d;
