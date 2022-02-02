@@ -165,6 +165,10 @@ let parse tokens =
             stmt :: go rest
 
     try
-        tokens |> List.ofSeq |> go |> Some
+        tokens
+        |> List.ofSeq
+        |> go
+        |> List.choose id
+        |> Some
     with
     | ParseError -> None
