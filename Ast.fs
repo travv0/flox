@@ -46,36 +46,18 @@ module BinaryOp =
         | TokenType.Plus -> Some Plus
         | TokenType.Slash -> Some Slash
         | TokenType.Star -> Some Star
+        | _ -> None
 
-        | TokenType.And
-        | TokenType.Bang
-        | TokenType.Class
-        | TokenType.Comma
-        | TokenType.Dot
-        | TokenType.Else
-        | TokenType.Equal
-        | TokenType.Eof
-        | TokenType.False
-        | TokenType.For
-        | TokenType.Fun
-        | TokenType.Identifier _
-        | TokenType.If
-        | TokenType.LeftBrace
-        | TokenType.LeftParen
-        | TokenType.Nil
-        | TokenType.Number _
-        | TokenType.Or
-        | TokenType.Print
-        | TokenType.Return
-        | TokenType.RightBrace
-        | TokenType.RightParen
-        | TokenType.Semicolon
-        | TokenType.String _
-        | TokenType.Super
-        | TokenType.This
-        | TokenType.True
-        | TokenType.Var
-        | TokenType.While -> None
+type LogicalOp =
+    | And
+    | Or
+
+module LogicalOp =
+    let ofToken { Type = type_ } =
+        match type_ with
+        | TokenType.And -> Some And
+        | TokenType.Or -> Some Or
+        | _ -> None
 
 type UnaryOp =
     | Minus
@@ -84,6 +66,7 @@ type UnaryOp =
 type Expr =
     | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
+    | Logical of Expr * (Token * LogicalOp) * Expr
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal
     | Variable of Token
@@ -91,6 +74,7 @@ type Expr =
 
 type Stmt =
     | Expression of Expr
+    | If of Expr * Stmt * option<Stmt>
     | Print of Expr
     | Var of Token * option<Expr>
     | Block of List<Stmt>

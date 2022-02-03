@@ -9,8 +9,10 @@ var c = "global c";
     var d = "inner d";
     print a;
     print b;
-    print c;
-    print d;
+    if (c == "inner c")
+        print c;
+    if (d == "inner d")
+        print d;
   }
   print a;
   print b;

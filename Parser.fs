@@ -69,9 +69,28 @@ module private Grammar =
 
     and statement tokens : StmtResult =
         match tokens with
+        | { Type = TokenType.If } :: rest -> ifStatement rest
         | { Type = TokenType.Print } :: rest -> printStatement rest
         | { Type = TokenType.LeftBrace } :: rest -> block rest
         | _ -> expressionStatement tokens
+
+    and ifStatement tokens : StmtResult =
+        let rest =
+            consume tokens LeftParen "Expect '(' after 'if'."
+
+        let condition, rest = expression rest
+
+        let rest =
+            consume rest RightParen "Expect ')' after if condition."
+
+        let thenBranch, rest = statement rest
+
+        let elseBranch, rest =
+            match rest with
+            | { Type = Else } :: rest -> statement rest |> fun (s, r) -> Some s, r
+            | _ -> None, rest
+
+        Stmt.If(condition, thenBranch, elseBranch), rest
 
     and block tokens : StmtResult =
         let statements = ResizeArray()
@@ -96,7 +115,7 @@ module private Grammar =
     and expression tokens : ExprResult = assignment tokens
 
     and assignment tokens : ExprResult =
-        let expr, rest = equality tokens
+        let expr, rest = logicOr tokens
 
         match rest with
         | ({ Type = Equal } as equals) :: rest ->
@@ -139,19 +158,21 @@ module private Grammar =
             Unary((operator, Minus), expr), rest
         | token -> primary token
 
-    and binary nextPrec opTokens tokens : ExprResult =
+    and bin cons ofToken nextPrec opTokens tokens : ExprResult =
         let rec go expr =
             function
             | operator :: rest when List.contains operator.Type opTokens ->
-                match BinaryOp.ofToken operator with
+                match ofToken operator with
                 | Some op ->
                     let right, rest = nextPrec rest
-                    go (Binary(expr, (operator, op), right)) rest
+                    go (cons (expr, (operator, op), right)) rest
                 | None -> expr, operator :: rest
             | rest -> expr, rest
 
         let expr, rest = nextPrec tokens
         go expr rest
+
+    and binary = bin Binary BinaryOp.ofToken
 
     and factor =
         binary unary [ TokenType.Slash; TokenType.Star ]
@@ -172,6 +193,12 @@ module private Grammar =
             comparison
             [ TokenType.BangEqual
               TokenType.EqualEqual ]
+
+    and logic = bin Logical LogicalOp.ofToken
+
+    and logicAnd = logic equality [ TokenType.And ]
+
+    and logicOr = logic logicAnd [ TokenType.Or ]
 
 let parse tokens =
     let rec go (tokens: list<Token>) =

@@ -84,8 +84,29 @@ let rec private evaluate (env: list<Environment>) =
         | left, BangEqual, right -> Bool(left <> right)
         | left, EqualEqual, right -> Bool(equal left right)
 
+    | Logical (leftExpr, ({ Line = line }, And), rightExpr) ->
+        let left = evaluate env leftExpr
+
+        if isTruthy left then
+            evaluate env rightExpr
+        else
+            left
+
+    | Logical (leftExpr, ({ Line = line }, Or), rightExpr) ->
+        let left = evaluate env leftExpr
+
+        if isTruthy left then
+            left
+        else
+            evaluate env rightExpr
+
 let rec private execute (env: list<Environment>) =
     function
+    | If (cond, thenBranch, elseBranch) ->
+        if isTruthy (evaluate env cond) then
+            execute env thenBranch
+        else
+            elseBranch |> Option.iter (execute env)
     | Expression expr -> evaluate env expr |> ignore
     | Print expr ->
         evaluate env expr
