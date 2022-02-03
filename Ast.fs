@@ -6,6 +6,7 @@ type Literal =
     | Bool of bool
     | String of string
     | Number of float
+    | Function of int * (list<Literal> -> Literal)
     | Nil
 
     override this.ToString() =
@@ -14,6 +15,7 @@ type Literal =
         | Bool false -> "false"
         | String s -> $"\"%s{s}\""
         | Number n -> string n
+        | Function _ -> "<fn>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -66,6 +68,7 @@ type UnaryOp =
 type Expr =
     | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
+    | Call of Expr * Token * list<Expr>
     | Logical of Expr * (Token * LogicalOp) * Expr
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal

@@ -42,3 +42,7 @@ type RuntimeError() =
 
     static member Report(value: Literal, message, line: int) = report line $" at '%O{value}'" message
     static member Report(message, line: int) = report line "" message
+
+let runtimeError message line =
+    raise
+    <| Exceptions.RuntimeError(None, message, line)

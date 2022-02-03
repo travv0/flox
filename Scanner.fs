@@ -5,6 +5,7 @@ open System
 open Error
 open Extensions
 open Token
+open System.Threading.Tasks
 
 type Scanner =
     { Source: list<char>
@@ -33,6 +34,7 @@ let make source =
     { Source = source |> List.ofSeq
       Line = 1
       Tokens = [] }
+
 
 let private addToken ({ Line = line; Source = source } as scanner) token newSource tokenLength =
     let text =

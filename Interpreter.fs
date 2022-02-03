@@ -11,7 +11,19 @@ type Environment = Environment.Environment
 let private equal left right =
     match left, right with
     | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
-    | _ -> left = right
+    | Number left, Number right -> left = right
+    | Bool left, Bool right -> left = right
+    | String left, String right -> left = right
+    | Nil, Nil -> true
+    | _, _ -> false
+
+let private notEqual left right =
+    match left, right with
+    | Number left, Number right -> left <> right
+    | Bool left, Bool right -> left <> right
+    | String left, String right -> left <> right
+    | Nil, Nil -> false
+    | _, _ -> true
 
 let private isTruthy =
     function
@@ -19,27 +31,40 @@ let private isTruthy =
     | Bool v -> v
     | _ -> true
 
-let private runtimeError expected value line =
+let private typeError expected value line =
     raise
     <| RuntimeError(Some value, $"Expect %s{expected}.", line)
+
+let private call token literal args =
+    match literal with
+    | Function (arity, fn) when List.length args = arity -> fn args
+    | Function (arity, _) -> runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
+    | _ -> typeError "function" literal token.Line
 
 let rec private evaluate (env: list<Environment>) =
     function
     | Literal v -> v
 
     | Variable token ->
-        match Environment.get env token with
+        match Environment.get token env with
         | Some v -> v
         | None -> Nil
 
-    | Assign (token, expr) -> evaluate env expr |> Environment.assign env token
+    | Assign (token, expr) ->
+        evaluate env expr
+        |> (fun v -> Environment.assign token v env)
+
+    | Call (callee, token, argExprs) ->
+        let fn = evaluate env callee
+        let args = List.map (evaluate env) argExprs
+        call token fn args
 
     | Grouping expr -> evaluate env expr
 
     | Unary (({ Line = line }, Minus), expr) ->
         match evaluate env expr with
         | Number n -> Number -n
-        | v -> runtimeError "number" v line
+        | v -> typeError "number" v line
 
     | Unary ((_, Bang), expr) ->
         let right = evaluate env expr
@@ -53,18 +78,18 @@ let rec private evaluate (env: list<Environment>) =
 
         | Number _, BinaryOp.Minus, badRight
         | Number _, Slash, badRight
-        | Number _, Star, badRight -> runtimeError "number" badRight line
+        | Number _, Star, badRight -> typeError "number" badRight line
 
         | badLeft, BinaryOp.Minus, _
         | badLeft, Slash, _
-        | badLeft, Star, _ -> runtimeError "number" badLeft line
+        | badLeft, Star, _ -> typeError "number" badLeft line
 
         | Number left, Plus, Number right -> Number(left + right)
         | String left, Plus, String right -> String(left + right)
 
-        | Number _, Plus, badRight -> runtimeError "number" badRight line
-        | String _, Plus, badRight -> runtimeError "string" badRight line
-        | badLeft, Plus, _ -> runtimeError "number or string" badLeft line
+        | Number _, Plus, badRight -> typeError "number" badRight line
+        | String _, Plus, badRight -> typeError "string" badRight line
+        | badLeft, Plus, _ -> typeError "number or string" badLeft line
 
         | Number left, Greater, Number right -> Bool(left > right)
         | Number left, GreaterEqual, Number right -> Bool(left >= right)
@@ -74,14 +99,14 @@ let rec private evaluate (env: list<Environment>) =
         | Number _, Greater, badRight
         | Number _, GreaterEqual, badRight
         | Number _, Less, badRight
-        | Number _, LessEqual, badRight -> runtimeError "number" badRight line
+        | Number _, LessEqual, badRight -> typeError "number" badRight line
 
         | badLeft, Greater, _
         | badLeft, GreaterEqual, _
         | badLeft, Less, _
-        | badLeft, LessEqual, _ -> runtimeError "number" badLeft line
+        | badLeft, LessEqual, _ -> typeError "number" badLeft line
 
-        | left, BangEqual, right -> Bool(left <> right)
+        | left, BangEqual, right -> Bool(notEqual left right)
         | left, EqualEqual, right -> Bool(equal left right)
 
     | Logical (leftExpr, ({ Line = line }, And), rightExpr) ->
@@ -117,14 +142,16 @@ let rec private execute (env: list<Environment>) =
     | Var (token, binding) ->
         binding
         |> Option.map (evaluate env)
-        |> Environment.define env token
+        |> (fun v -> Environment.define token v env)
     | Block statements ->
         let env = Environment.make () :: env
 
         for statement in statements do
             execute env statement
 
-let environment = Environment.make ()
+let environment =
+    Environment.make ()
+    |> Environment.defineGlobal "clock" Globals.clock
 
 let interpret statements =
     try

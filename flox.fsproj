@@ -1,24 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Token.fs" />
     <Compile Include="Ast.fs" />
-
     <Compile Include="Extensions.fs" />
     <Compile Include="Error.fs" />
-
     <Compile Include="Scanner.fs" />
     <Compile Include="Parser.fs" />
-
+    <Compile Include="Globals.fs" />
     <Compile Include="Environment.fs" />
     <Compile Include="Interpreter.fs" />
-
     <Compile Include="Lox.fs" />
   </ItemGroup>
-
 </Project>

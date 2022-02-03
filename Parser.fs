@@ -207,6 +207,43 @@ module private Grammar =
             raise
             <| parseError (eof 0) tokens "Unexpected end of file."
 
+    and call tokens : ExprResult =
+        let mutable expr, rest = primary tokens
+        let mutable callsCompleted = false
+
+        while not callsCompleted do
+            match rest with
+            | ({ Type = LeftParen } as paren) :: rest' ->
+                let args, rest' = arguments rest'
+                expr <- Expr.Call(expr, paren, args)
+                rest <- rest'
+            | _ -> callsCompleted <- true
+
+        expr, rest
+
+    and arguments tokens : list<Expr> * list<Token> =
+        match tokens with
+        | { Type = RightParen } :: rest -> [], rest
+        | _ ->
+            let arg, rest = expression tokens
+
+            let rec arguments' tokens =
+                match tokens with
+                | { Type = Comma } :: rest ->
+                    let arg, rest = expression rest
+
+                    arguments' rest
+                    |> fun (args, rest) ->
+                        if List.length args >= 255 then
+                            parseError (List.head rest) rest "Can't have more than 255 arguments"
+                            |> ignore
+
+                        arg :: args, rest
+                | _ -> [], consume tokens RightParen "Expect ')' after arguments."
+
+            arguments' rest
+            |> fun (args, rest) -> arg :: args, rest
+
     and unary tokens : ExprResult =
         match tokens with
         | ({ Type = TokenType.Bang } as operator) :: rest ->
@@ -215,7 +252,7 @@ module private Grammar =
         | ({ Type = TokenType.Minus } as operator) :: rest ->
             let expr, rest = primary rest
             Unary((operator, Minus), expr), rest
-        | token -> primary token
+        | _ -> call tokens
 
     and bin cons ofToken nextPrec opTokens tokens : ExprResult =
         let rec go expr =
