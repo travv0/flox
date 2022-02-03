@@ -70,6 +70,7 @@ module private Grammar =
     and statement tokens : StmtResult =
         match tokens with
         | { Type = TokenType.If } :: rest -> ifStatement rest
+        | { Type = TokenType.While } :: rest -> whileStatement rest
         | { Type = TokenType.Print } :: rest -> printStatement rest
         | { Type = TokenType.LeftBrace } :: rest -> block rest
         | _ -> expressionStatement tokens
@@ -91,6 +92,18 @@ module private Grammar =
             | _ -> None, rest
 
         Stmt.If(condition, thenBranch, elseBranch), rest
+
+    and whileStatement tokens : StmtResult =
+        let rest =
+            consume tokens LeftParen "Expect '(' after 'while'."
+
+        let condition, rest = expression rest
+
+        let rest =
+            consume rest RightParen "Expect ')' after while condition."
+
+        let body, rest = statement rest
+        Stmt.While(condition, body), rest
 
     and block tokens : StmtResult =
         let statements = ResizeArray()

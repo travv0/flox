@@ -22,4 +22,12 @@ var c = "global c";
 print a;
 print b;
 print c;
-print d;
+if (false) {
+    print d;
+}
+
+var i = 0;
+while (i < 10) {
+    print i;
+    i = i + 1;
+}

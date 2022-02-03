@@ -111,6 +111,9 @@ let rec private execute (env: list<Environment>) =
     | Print expr ->
         evaluate env expr
         |> fun v -> v.Display() |> printfn "%s"
+    | While (cond, body) ->
+        while isTruthy (evaluate env cond) do
+            execute env body
     | Var (token, binding) ->
         binding
         |> Option.map (evaluate env)

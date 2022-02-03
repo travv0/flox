@@ -77,4 +77,5 @@ type Stmt =
     | If of Expr * Stmt * option<Stmt>
     | Print of Expr
     | Var of Token * option<Expr>
+    | While of Expr * Stmt
     | Block of List<Stmt>
