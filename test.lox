@@ -26,8 +26,21 @@ if (false) {
     print d;
 }
 
+print "";
+
 var i = 0;
 while (i < 10) {
     print i;
     i = i + 1;
+}
+
+print "";
+
+var a = 0;
+var temp;
+
+for (var b = 1; a < 10000; b = temp + b) {
+  print a;
+  temp = a;
+  a = b;
 }

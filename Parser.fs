@@ -69,6 +69,7 @@ module private Grammar =
 
     and statement tokens : StmtResult =
         match tokens with
+        | { Type = TokenType.For } :: rest -> forStatement rest
         | { Type = TokenType.If } :: rest -> ifStatement rest
         | { Type = TokenType.While } :: rest -> whileStatement rest
         | { Type = TokenType.Print } :: rest -> printStatement rest
@@ -104,6 +105,51 @@ module private Grammar =
 
         let body, rest = statement rest
         Stmt.While(condition, body), rest
+
+    and forStatement tokens : StmtResult =
+        let rest =
+            consume tokens LeftParen "Expect '(' after 'for'."
+
+        let initializer, rest =
+            match rest with
+            | { Type = Semicolon } :: rest -> None, rest
+            | { Type = TokenType.Var } :: rest -> varDeclaration rest |> fun (d, r) -> Some d, r
+            | _ ->
+                expressionStatement rest
+                |> fun (e, r) -> Some e, r
+
+        let condition, rest =
+            match rest with
+            | { Type = Semicolon } :: rest -> None, rest
+            | _ ->
+                expression rest
+                |> fun (e, r) -> Some e, consume r Semicolon "Expect ';' after loop condition."
+
+        let increment, rest =
+            match rest with
+            | { Type = RightParen } :: rest -> None, rest
+            | _ ->
+                expression rest
+                |> fun (e, r) -> Some e, consume r RightParen "Expect ')' after for clauses."
+
+        let body, rest = statement rest
+
+        let body =
+            match increment with
+            | None -> body
+            | Some inc -> Stmt.Block([ body; Stmt.Expression(inc) ])
+
+        let body =
+            match condition with
+            | None -> Stmt.While(Literal(Bool(true)), body)
+            | Some cond -> Stmt.While(cond, body)
+
+        let body =
+            match initializer with
+            | None -> body
+            | Some init -> Stmt.Block([ init; body ])
+
+        body, rest
 
     and block tokens : StmtResult =
         let statements = ResizeArray()

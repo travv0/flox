@@ -124,12 +124,12 @@ let rec private execute (env: list<Environment>) =
         for statement in statements do
             execute env statement
 
-let interpret statements =
-    let env = Environment.make ()
+let environment = Environment.make ()
 
+let interpret statements =
     try
         for statement in statements do
-            execute [ env ] statement
+            execute [ environment ] statement
     with
     | RuntimeError (value, expected, line) ->
         match value with

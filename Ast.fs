@@ -78,4 +78,4 @@ type Stmt =
     | Print of Expr
     | Var of Token * option<Expr>
     | While of Expr * Stmt
-    | Block of List<Stmt>
+    | Block of list<Stmt>
