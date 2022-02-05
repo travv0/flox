@@ -10,7 +10,7 @@ module Exceptions =
     exception RuntimeError of option<Literal> * string * int
 
 let printError line where message =
-    printfn $"[line %d{line}] Error%s{where}: %s{message}"
+    eprintfn $"[line %d{line}] Error%s{where}: %s{message}"
 
 type Error() =
     static let mutable hadError = false

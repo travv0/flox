@@ -35,7 +35,7 @@ let main args =
     | [||] -> runPrompt ()
     | [| file |] -> runFile file
     | _ ->
-        printfn "Usage: flox [script]"
+        eprintfn "Usage: flox [script]"
         exit 64
 
     0
