@@ -6,11 +6,13 @@ open System.IO
 open Error
 
 let run source =
-    let tokens =
-        Scanner.make source |> Scanner.scanTokens
+    let ast =
+        Scanner.make source
+        |> Scanner.scanTokens
+        |> Parser.parse
 
-    Parser.parse tokens
-    |> Option.iter Interpreter.interpret
+    if not (Error.Occurred()) then
+        Interpreter.interpret ast
 
 let runFile path =
     File.ReadAllText path |> run

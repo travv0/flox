@@ -309,4 +309,3 @@ let parse tokens =
     |> List.ofSeq
     |> go
     |> List.choose id
-    |> Some
