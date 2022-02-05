@@ -96,4 +96,17 @@ counter();
 counter();
 
 print "";
+
+var a = "global";
+{
+  fun showA() {
+    print a;
+  }
+
+  showA();
+  var a = "block";
+  showA();
+}
+
+print "";
 print clock() - start;

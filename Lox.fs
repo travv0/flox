@@ -5,17 +5,29 @@ open System.IO
 
 open Error
 
-let run source =
-    let ast =
-        Scanner.make source
-        |> Scanner.scanTokens
-        |> Parser.parse
+type RunType =
+    | Interpret
+    | Tokens
+    | Ast
 
-    if not (Error.Occurred()) then
-        Interpreter.interpret ast
+let run runType source =
+    let tokens =
+        Scanner.make source |> Scanner.scanTokens
 
-let runFile path =
-    File.ReadAllText path |> run
+    if runType = Tokens then
+        if not (Error.Occurred()) then
+            printfn "%A" tokens
+    else
+        let ast = tokens |> Parser.parse
+
+        if not (Error.Occurred()) then
+            if runType = Ast then
+                printfn "%A" ast
+            else
+                Interpreter.interpret ast
+
+let runFile runType path =
+    File.ReadAllText path |> run runType
 
     // Indicate an error in the exit code.
     if Error.Occurred() then exit 65
@@ -26,7 +38,7 @@ let rec runPrompt () =
 
     match Console.ReadLine() |> Option.ofObj with
     | Some line ->
-        run line
+        run Interpret line
         Error.Reset()
         runPrompt ()
     | None -> ()
@@ -35,9 +47,11 @@ let rec runPrompt () =
 let main args =
     match args with
     | [||] -> runPrompt ()
-    | [| file |] -> runFile file
+    | [| file |] -> runFile Interpret file
+    | [| "--ast"; file |] -> runFile Ast file
+    | [| "--tokens"; file |] -> runFile Tokens file
     | _ ->
-        eprintfn "Usage: flox [script]"
+        eprintfn "Usage: flox [--tokens|--ast] [script]"
         exit 64
 
     0
