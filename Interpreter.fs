@@ -42,7 +42,7 @@ let private call token literal args =
         runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
     | _ -> typeError "function" literal token.Line
 
-let rec private evaluate (env: list<Environment>) =
+let rec private evaluate (env: Environment) =
     function
     | Literal v -> v
 
@@ -128,7 +128,7 @@ let rec private evaluate (env: list<Environment>) =
 
 exception Return of Literal
 
-let rec private execute (env: list<Environment>) =
+let rec private execute (env: Environment) =
     function
     | If (cond, thenBranch, elseBranch) ->
         if isTruthy (evaluate env cond) then
@@ -155,7 +155,7 @@ let rec private execute (env: list<Environment>) =
         |> (fun v -> Environment.define token v env)
     | Function (token, parameters, body) ->
         let call (args: list<Literal>) =
-            let env = Environment.make () :: env
+            let env = Environment.extend env
             List.iter2 (fun p a -> Environment.define p (Some a) env) parameters args
             let mutable ret = Nil
 
@@ -168,7 +168,7 @@ let rec private execute (env: list<Environment>) =
 
         Environment.define token (Some(Literal.Function(token.Lexeme, List.length parameters, call))) env
     | Block statements ->
-        let env = Environment.make () :: env
+        let env = Environment.extend env
 
         for statement in statements do
             execute env statement
@@ -180,7 +180,7 @@ let environment =
 let interpret statements =
     try
         for statement in statements do
-            execute [ environment ] statement
+            execute environment statement
     with
     | RuntimeError (value, expected, line) ->
         match value with
