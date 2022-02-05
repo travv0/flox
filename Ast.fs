@@ -80,6 +80,7 @@ type Stmt =
     | Function of Token * list<Token> * Stmt
     | If of Expr * Stmt * option<Stmt>
     | Print of Expr
+    | Return of Token * option<Expr>
     | Var of Token * option<Expr>
     | While of Expr * Stmt
     | Block of list<Stmt>

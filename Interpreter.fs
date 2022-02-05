@@ -126,6 +126,8 @@ let rec private evaluate (env: list<Environment>) =
         else
             evaluate env rightExpr
 
+exception Return of Literal
+
 let rec private execute (env: list<Environment>) =
     function
     | If (cond, thenBranch, elseBranch) ->
@@ -137,6 +139,13 @@ let rec private execute (env: list<Environment>) =
     | Print expr ->
         evaluate env expr
         |> fun v -> v.Display() |> printfn "%s"
+    | Stmt.Return (_, expr) ->
+        let value =
+            expr
+            |> Option.map (evaluate env)
+            |> Option.defaultValue Nil
+
+        raise <| Return(value)
     | While (cond, body) ->
         while isTruthy (evaluate env cond) do
             execute env body
@@ -148,8 +157,14 @@ let rec private execute (env: list<Environment>) =
         let call (args: list<Literal>) =
             let env = Environment.make () :: env
             List.iter2 (fun p a -> Environment.define p (Some a) env) parameters args
-            execute env body
-            Nil
+            let mutable ret = Nil
+
+            try
+                execute env body
+            with
+            | Return (value) -> ret <- value
+
+            ret
 
         Environment.define token (Some(Literal.Function(token.Lexeme, List.length parameters, call))) env
     | Block statements ->

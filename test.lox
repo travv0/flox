@@ -1,3 +1,5 @@
+var start = clock();
+
 var a = "global a";
 var b = "global b";
 var c = "global c";
@@ -53,3 +55,45 @@ fun count(n) {
 }
 
 count(3);
+
+print "";
+
+fun weirdCount(n) {
+  while (n < 100) {
+    if (n == 3) return n;
+    print n;
+    n = n + 1;
+  }
+}
+
+print weirdCount(1);
+
+print "";
+
+fun fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 2) + fib(n - 1);
+}
+
+for (var i = 0; i < 10; i = i + 1) {
+  print fib(i);
+}
+
+print "";
+
+fun makeCounter() {
+  var i = 0;
+  fun count() {
+    i = i + 1;
+    print i;
+  }
+
+  return count;
+}
+
+var counter = makeCounter();
+counter();
+counter();
+
+print "";
+print clock() - start;

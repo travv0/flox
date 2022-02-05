@@ -115,9 +115,20 @@ module private Grammar =
         | { Type = TokenType.For } :: rest -> forStatement rest
         | { Type = TokenType.If } :: rest -> ifStatement rest
         | { Type = TokenType.While } :: rest -> whileStatement rest
+        | ({ Type = TokenType.Return } as token) :: rest -> returnStatement token rest
         | { Type = TokenType.Print } :: rest -> printStatement rest
         | { Type = TokenType.LeftBrace } :: rest -> block rest
         | _ -> expressionStatement tokens
+
+    and returnStatement keyword tokens : StmtResult =
+        let value, rest =
+            match tokens with
+            | { Type = Semicolon } :: rest -> None, rest
+            | tokens ->
+                let value, rest = expression tokens
+                Some value, consume Semicolon "Expect ';' after return value." rest
+
+        Stmt.Return(keyword, value), rest
 
     and ifStatement tokens : StmtResult =
         let rest =
