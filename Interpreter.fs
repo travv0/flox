@@ -37,8 +37,9 @@ let private typeError expected value line =
 
 let private call token literal args =
     match literal with
-    | Function (arity, fn) when List.length args = arity -> fn args
-    | Function (arity, _) -> runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
+    | Literal.Function (_, arity, fn) when List.length args = arity -> fn args
+    | Literal.Function (_, arity, _) ->
+        runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
     | _ -> typeError "function" literal token.Line
 
 let rec private evaluate (env: list<Environment>) =
@@ -143,6 +144,14 @@ let rec private execute (env: list<Environment>) =
         binding
         |> Option.map (evaluate env)
         |> (fun v -> Environment.define token v env)
+    | Function (token, parameters, body) ->
+        let call (args: list<Literal>) =
+            let env = Environment.make () :: env
+            List.iter2 (fun p a -> Environment.define p (Some a) env) parameters args
+            execute env body
+            Nil
+
+        Environment.define token (Some(Literal.Function(token.Lexeme, List.length parameters, call))) env
     | Block statements ->
         let env = Environment.make () :: env
 

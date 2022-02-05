@@ -6,7 +6,7 @@ type Literal =
     | Bool of bool
     | String of string
     | Number of float
-    | Function of int * (list<Literal> -> Literal)
+    | Function of string * int * (list<Literal> -> Literal)
     | Nil
 
     override this.ToString() =
@@ -15,7 +15,7 @@ type Literal =
         | Bool false -> "false"
         | String s -> $"\"%s{s}\""
         | Number n -> string n
-        | Function _ -> "<fn>"
+        | Function (name, _, _) -> $"<fn %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -77,6 +77,7 @@ type Expr =
 
 type Stmt =
     | Expression of Expr
+    | Function of Token * list<Token> * Stmt
     | If of Expr * Stmt * option<Stmt>
     | Print of Expr
     | Var of Token * option<Expr>

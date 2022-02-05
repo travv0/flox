@@ -8,13 +8,15 @@ let private parseError (token: Token) tokens message =
     Error.Report(token, message)
     ParseError(tokens)
 
-let private consume tokens type_ message =
+let private eofError () =
+    raise
+    <| parseError (eof 0) [] "Unexpected end of file."
+
+let private consume type_ message tokens =
     match tokens with
     | token :: rest when token.Type = type_ -> rest
     | token :: rest -> raise <| parseError token rest message
-    | _ ->
-        raise
-        <| parseError (eof 0) tokens "Unexpected end of file."
+    | _ -> eofError ()
 
 let private synchronize tokens : list<Token> =
     let isStatementStart token =
@@ -48,8 +50,10 @@ module private Grammar =
     let rec declaration tokens =
         try
             match tokens with
-            | { Type = TokenType.Var } :: rest -> varDeclaration rest |> fun (a, b) -> Some a, b
-            | _ -> statement tokens |> fun (a, b) -> Some a, b
+            | { Type = TokenType.Var } :: rest -> varDeclaration rest
+            | { Type = TokenType.Fun } :: rest -> funDeclaration "function" rest
+            | _ -> statement tokens
+            |> fun (a, b) -> Some a, b
         with
         | ParseError rest -> None, synchronize rest
 
@@ -57,15 +61,54 @@ module private Grammar =
         match tokens with
         | ({ Type = Identifier } as token) :: { Type = Equal } :: rest ->
             let initializer, rest = expression rest
-            Stmt.Var(token, Some initializer), consume rest Semicolon "Expect ';' after variable declaration."
+            Stmt.Var(token, Some initializer), consume Semicolon "Expect ';' after variable declaration." rest
         | ({ Type = Identifier } as token) :: rest ->
-            Stmt.Var(token, None), consume rest Semicolon "Expect ';' after variable declaration."
+            Stmt.Var(token, None), consume Semicolon "Expect ';' after variable declaration." rest
         | token :: rest ->
             raise
             <| parseError token rest "Expect variable name."
-        | _ ->
+        | _ -> eofError ()
+
+    and funDeclaration (kind: string) tokens : StmtResult =
+        match tokens with
+        | ({ Type = Identifier } as ident) :: rest ->
+            let rest =
+                consume LeftParen $"Expect '(' after %s{kind} name." rest
+
+            let paramList, rest = parameters rest
+
+            let rest =
+                consume LeftBrace $"Expect '{{' before %s{kind} body." rest
+
+            let body, rest = block rest
+            Stmt.Function(ident, paramList, body), rest
+        | token :: rest ->
             raise
-            <| parseError (eof 0) tokens "Unexpected end of file."
+            <| parseError token rest $"Expect %s{kind} name."
+        | _ -> eofError ()
+
+    and parameters tokens : list<Token> * list<Token> =
+        match tokens with
+        | { Type = RightParen } :: rest -> [], rest
+        | ({ Type = Identifier } as param) :: rest ->
+            let rec parameters' tokens =
+                match tokens with
+                | { Type = Comma } :: ({ Type = Identifier } as param) :: rest ->
+                    parameters' rest
+                    |> fun (parameters, rest) ->
+                        if List.length parameters >= 255 then
+                            parseError (List.head rest) rest "Can't have more than 255 parameters."
+                            |> ignore
+
+                        param :: parameters, rest
+                | _ -> [], consume RightParen "Expect ')' after parameters." tokens
+
+            parameters' rest
+            |> fun (parameters, rest) -> param :: parameters, rest
+        | token :: rest ->
+            raise
+            <| parseError token rest "Expect ')' or parameter."
+        | _ -> eofError ()
 
     and statement tokens : StmtResult =
         match tokens with
@@ -78,12 +121,12 @@ module private Grammar =
 
     and ifStatement tokens : StmtResult =
         let rest =
-            consume tokens LeftParen "Expect '(' after 'if'."
+            consume LeftParen "Expect '(' after 'if'." tokens
 
         let condition, rest = expression rest
 
         let rest =
-            consume rest RightParen "Expect ')' after if condition."
+            consume RightParen "Expect ')' after if condition." rest
 
         let thenBranch, rest = statement rest
 
@@ -96,19 +139,19 @@ module private Grammar =
 
     and whileStatement tokens : StmtResult =
         let rest =
-            consume tokens LeftParen "Expect '(' after 'while'."
+            consume LeftParen "Expect '(' after 'while'." tokens
 
         let condition, rest = expression rest
 
         let rest =
-            consume rest RightParen "Expect ')' after while condition."
+            consume RightParen "Expect ')' after while condition." rest
 
         let body, rest = statement rest
         Stmt.While(condition, body), rest
 
     and forStatement tokens : StmtResult =
         let rest =
-            consume tokens LeftParen "Expect '(' after 'for'."
+            consume LeftParen "Expect '(' after 'for'." tokens
 
         let initializer, rest =
             match rest with
@@ -123,14 +166,14 @@ module private Grammar =
             | { Type = Semicolon } :: rest -> None, rest
             | _ ->
                 expression rest
-                |> fun (e, r) -> Some e, consume r Semicolon "Expect ';' after loop condition."
+                |> fun (e, r) -> Some e, consume Semicolon "Expect ';' after loop condition." r
 
         let increment, rest =
             match rest with
             | { Type = RightParen } :: rest -> None, rest
             | _ ->
                 expression rest
-                |> fun (e, r) -> Some e, consume r RightParen "Expect ')' after for clauses."
+                |> fun (e, r) -> Some e, consume RightParen "Expect ')' after for clauses." r
 
         let body, rest = statement rest
 
@@ -161,15 +204,15 @@ module private Grammar =
             decl |> Option.iter statements.Add
             rest <- r
 
-        Stmt.Block(statements |> List.ofSeq), consume rest RightBrace "Expect '}' after block."
+        Stmt.Block(statements |> List.ofSeq), consume RightBrace "Expect '}' after block." rest
 
     and printStatement tokens : StmtResult =
         let value, rest = expression tokens
-        Stmt.Print(value), consume rest Semicolon "Expect ';' after value."
+        Stmt.Print(value), consume Semicolon "Expect ';' after value." rest
 
     and expressionStatement tokens : StmtResult =
         let expr, rest = expression tokens
-        Stmt.Expression(expr), consume rest Semicolon "Expect ';' after expression."
+        Stmt.Expression(expr), consume Semicolon "Expect ';' after expression." rest
 
     and expression tokens : ExprResult = assignment tokens
 
@@ -199,13 +242,11 @@ module private Grammar =
         | ({ Type = TokenType.Identifier } as token) :: rest -> Variable token, rest
         | { Type = TokenType.LeftParen } :: rest ->
             let expr, rest = expression rest
-            Grouping(expr), consume rest TokenType.RightParen "Expect ')' after expression."
+            Grouping(expr), consume TokenType.RightParen "Expect ')' after expression." rest
         | token :: rest ->
             raise
             <| parseError token rest "Expect expression."
-        | _ ->
-            raise
-            <| parseError (eof 0) tokens "Unexpected end of file."
+        | _ -> eofError ()
 
     and call tokens : ExprResult =
         let mutable expr, rest = primary tokens
@@ -235,11 +276,11 @@ module private Grammar =
                     arguments' rest
                     |> fun (args, rest) ->
                         if List.length args >= 255 then
-                            parseError (List.head rest) rest "Can't have more than 255 arguments"
+                            parseError (List.head rest) rest "Can't have more than 255 arguments."
                             |> ignore
 
                         arg :: args, rest
-                | _ -> [], consume tokens RightParen "Expect ')' after arguments."
+                | _ -> [], consume RightParen "Expect ')' after arguments." tokens
 
             arguments' rest
             |> fun (args, rest) -> arg :: args, rest
@@ -305,7 +346,4 @@ let parse tokens =
             let stmt, rest = Grammar.declaration tokens
             stmt :: go rest
 
-    tokens
-    |> List.ofSeq
-    |> go
-    |> List.choose id
+    tokens |> List.ofSeq |> go |> List.choose id

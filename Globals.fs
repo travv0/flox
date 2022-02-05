@@ -6,7 +6,8 @@ open Ast
 open System
 
 let clock =
-    Function(
+    Literal.Function(
+        "clock",
         0,
         (fun [] ->
             Number
