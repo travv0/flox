@@ -46,5 +46,25 @@ let rec get token (env: Environment) =
     | Environment [] -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
     | Environment (e :: enclosing) ->
         match e.TryGetValue(token.Lexeme) with
-        | true, value -> value
-        | false, _ -> get token (Environment enclosing)
+        | true, Some value -> value
+        | _, _ -> get token (Environment enclosing)
+
+let rec getAt n token (Environment env) =
+    List.skip n env
+    |> fun env -> get token (Environment env)
+
+let rec assignAt n token value (Environment env) =
+    List.skip n env
+    |> fun env -> assign token value (Environment env)
+
+let rec getGlobal token (Environment env) =
+    match env with
+    | [] -> raise <| FatalError("No environment.")
+    | [ e ] -> get token (Environment [ e ])
+    | _ :: enclosing -> getGlobal token (Environment enclosing)
+
+let rec assignGlobal token value (Environment env) =
+    match env with
+    | [] -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
+    | [ e ] -> assign token value (Environment [ e ])
+    | e :: enclosing -> assignGlobal token value (Environment enclosing)

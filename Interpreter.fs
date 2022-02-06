@@ -1,12 +1,17 @@
 module Interpreter
 
 open System
+open System.Collections.Generic
 
 open Token
 open Ast
 open Error
 
 type Environment = Environment.Environment
+
+let locals = Dictionary<Expr, int>()
+
+let resolve expr depth = locals.Add(expr, depth)
 
 let private equal left right =
     match left, right with
@@ -42,18 +47,23 @@ let private call token literal args =
         runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
     | _ -> typeError "function" literal token.Line
 
+let private lookUpVariable env name expr =
+    match locals.TryGetValue(expr) with
+    | true, distance -> Environment.getAt distance name env
+    | false, _ -> Environment.getGlobal name env
+
 let rec private evaluate (env: Environment) =
     function
     | Literal v -> v
 
-    | Variable token ->
-        match Environment.get token env with
-        | Some v -> v
-        | None -> Nil
+    | Variable name as expr -> lookUpVariable env name expr
 
     | Assign (token, expr) ->
-        evaluate env expr
-        |> (fun v -> Environment.assign token v env)
+        let v = evaluate env expr
+
+        match locals.TryGetValue(expr) with
+        | true, distance -> Environment.assignAt distance token v env
+        | false, _ -> Environment.assignGlobal token v env
 
     | Call (callee, token, argExprs) ->
         let fn = evaluate env callee

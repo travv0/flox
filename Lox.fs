@@ -19,6 +19,7 @@ let run runType source =
             printfn "%A" tokens
     else
         let ast = tokens |> Parser.parse
+        Resolver.resolve ast
 
         if not (Error.Occurred()) then
             if runType = Ast then

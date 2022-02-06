@@ -1,5 +1,7 @@
 module Ast
 
+open System
+
 open Token
 
 type Literal =
@@ -65,6 +67,7 @@ type UnaryOp =
     | Minus
     | Bang
 
+[<CustomEquality; NoComparison>]
 type Expr =
     | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
@@ -74,6 +77,9 @@ type Expr =
     | Literal of Literal
     | Variable of Token
     | Grouping of Expr
+
+    interface IEquatable<Expr> with
+        member this.Equals(other) = obj.ReferenceEquals(this, other)
 
 type Stmt =
     | Expression of Expr

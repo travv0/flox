@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
@@ -13,6 +13,7 @@
     <Compile Include="Globals.fs" />
     <Compile Include="Environment.fs" />
     <Compile Include="Interpreter.fs" />
+    <Compile Include="Resolver.fs" />
     <Compile Include="Lox.fs" />
   </ItemGroup>
 </Project>
