@@ -1,16 +1,23 @@
 module Scanner
 
-open System
-
+open FSharpx.State
 open Error
 open Extensions
 open Token
-open System.Threading.Tasks
+open System
 
-type Scanner =
+type ScanError =
+    { scanErrorLine: int
+      scanErrorMessage: string }
+
+type ScannerState =
     { Source: list<char>
       Line: int
-      Tokens: list<Token> }
+      Tokens: list<Token>
+      Errors: list<ScanError> }
+
+type Scanner<'a> = State<'a, ScannerState>
+type Scanner = Scanner<unit>
 
 let keywords =
     Map.ofList [ "and", And
@@ -33,50 +40,100 @@ let keywords =
 let make source =
     { Source = source |> List.ofSeq
       Line = 1
-      Tokens = [] }
+      Tokens = []
+      Errors = [] }
 
+let modify (f: 's -> 's) : State<unit, 's> =
+    state {
+        let! s = getState
+        do! putState (f s)
+    }
 
-let private addToken ({ Line = line; Source = source } as scanner) token newSource tokenLength =
-    let text =
-        List.take tokenLength source |> String.ofSeq
+let private addToken (token: TokenType) (lexeme: string) (line: int) : Scanner =
+    state {
+        do!
+            modify (fun s ->
+                { s with
+                    Tokens =
+                        { Type = token
+                          Lexeme = lexeme
+                          Line = line }
+                        :: s.Tokens })
+    }
 
-    { scanner with
-        Source = newSource
-        Tokens =
-            { Type = token
-              Lexeme = text
-              Line = line }
-            :: scanner.Tokens }
+let scanOne: Scanner<option<char>> =
+    state {
+        let! scanner = getState
 
-let private scanIdentifier ({ Source = source } as scanner) =
-    // Get the first character of the identifier.
-    let ident, rest = List.splitAt 1 source
+        match List.splitAt 1 scanner.Source with
+        | ([ c ], rest) ->
+            do!
+                modify (fun s ->
+                    { s with
+                        Source = rest
+                        Line = if c = '\n' then s.Line + 1 else s.Line })
 
-    let ident, rest =
-        List.splitWhile (fun c -> c = '_' || Char.IsLetterOrDigit(c)) rest
-        |> (fun (i, r) -> (ident @ i, r))
+            return Some c
+        | _ -> return None
+    }
 
-    let text = String.ofSeq ident
+let scanWhile (f: char -> bool) : Scanner<list<char>> =
+    state {
+        let! scanner = getState
+        let (cs, rest) = List.splitWhile f scanner.Source
 
-    let tokenType =
-        match Map.tryFind text keywords with
-        | Some t -> t
-        | None -> Identifier
+        do!
+            modify (fun s ->
+                { s with
+                    Source = rest
+                    Line = s.Line + List.length (List.filter ((=) '\n') cs) })
 
-    addToken scanner tokenType rest (List.length ident)
+        return cs
+    }
 
-let private scanNumber ({ Source = source } as scanner) =
-    let num, rest = List.splitWhile Char.IsDigit source
+let private scanIdentifier (first: char) : Scanner =
+    state {
+        let! scanner = getState
+        let! after = scanWhile (fun c -> c = '_' || Char.IsLetterOrDigit c)
 
-    // Look for a fractional part.
-    let num, rest =
-        match rest with
-        | '.' :: c :: rest when Char.IsDigit(c) ->
-            let cs, rest = List.splitWhile Char.IsDigit rest
-            num @ '.' :: c :: cs, rest
-        | _ -> num, rest
+        let ident = first :: after
+        let text = String.ofSeq ident
 
-    addToken scanner (Number(num |> String.ofSeq |> float)) rest (List.length num)
+        let tokenType =
+            match Map.tryFind text keywords with
+            | Some t -> t
+            | None -> Identifier
+
+        do! addToken tokenType text scanner.Line
+    }
+
+let consume char message =
+    state {
+        let! scanner = getState
+        let! c = scanOne
+
+        if c <> Some char then
+            Error.Report(scanner.Line, message)
+    }
+
+let private scanNumber first : Scanner =
+    state {
+        let! scanner = getState
+        let! wholePart = scanWhile Char.IsDigit
+
+        // Look for a fractional part.
+        let! num =
+            state {
+                match scanner.Source with
+                | '.' :: c :: _ when Char.IsDigit(c) ->
+                    do! consume '.' "Failed to consume '.' in number."
+                    let! cs = scanWhile Char.IsDigit
+                    return String.ofSeq wholePart + "." + String.ofSeq cs
+                | _ -> return String.ofSeq wholePart
+            }
+
+        return! addToken (Number(float num)) num scanner.Line
+    }
 
 let private scanString ({ Source = source; Line = line } as scanner) =
     let str, rest =
@@ -151,7 +208,7 @@ let private scanToken =
 
         | _ -> failwith "scanToken: no more tokens"
 
-let rec scanTokens =
+let rec scanTokens: Scanner<list<Token>> =
     function
     | { Source = []
         Tokens = tokens

@@ -16,4 +16,7 @@
     <Compile Include="Resolver.fs" />
     <Compile Include="Lox.fs" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharpx.Extras" Version="3.0.0" />
+  </ItemGroup>
 </Project>
