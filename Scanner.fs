@@ -116,10 +116,11 @@ let consume char message =
             Error.Report(scanner.Line, message)
     }
 
-let private scanNumber first : Scanner =
+let private scanNumber (first: char) : Scanner =
     state {
         let! scanner = getState
-        let! wholePart = scanWhile Char.IsDigit
+        let! w = scanWhile Char.IsDigit
+        let wholePart = first :: w
 
         // Look for a fractional part.
         let! num =
@@ -152,8 +153,8 @@ let comment: Scanner =
 
 let private scanToken: Scanner =
     state {
-        let! scanner = getState
         let! c = scanOne
+        let! scanner = getState
 
         do!
             match c, scanner.Source with
@@ -167,22 +168,23 @@ let private scanToken: Scanner =
             | Some '+', _ -> addToken Plus "+" scanner.Line
             | Some ';', _ -> addToken Semicolon ";" scanner.Line
             | Some '*', _ -> addToken Star "*" scanner.Line
-            | Some '!', '=' :: _ -> addToken BangEqual "!=" scanner.Line
+            | Some '!', '=' :: _ -> scanOne >>. addToken BangEqual "!=" scanner.Line
             | Some '!', _ -> addToken Bang "!" scanner.Line
-            | Some '=', '=' :: _ -> addToken EqualEqual "==" scanner.Line
+            | Some '=', '=' :: _ -> scanOne >>. addToken EqualEqual "==" scanner.Line
             | Some '=', _ -> addToken Equal "=" scanner.Line
-            | Some '<', '=' :: _ -> addToken LessEqual "<=" scanner.Line
+            | Some '<', '=' :: _ -> scanOne >>. addToken LessEqual "<=" scanner.Line
             | Some '<', _ -> addToken Less "<" scanner.Line
-            | Some '>', '=' :: _ -> addToken GreaterEqual ">=" scanner.Line
+            | Some '>', '=' :: _ ->
+                scanOne
+                >>. addToken GreaterEqual ">=" scanner.Line
             | Some '>', _ -> addToken Greater ">" scanner.Line
-            | Some '/', '/' :: source -> comment
+            | Some '/', '/' :: _ -> comment
             | Some '/', _ -> addToken Slash "/" scanner.Line
 
             | Some ' ', _
             | Some '\r', _
             | Some '\t', _
             | Some '\n', _ -> empty
-            // Ignore whitespace.
 
             | Some '"', _ -> scanString
 

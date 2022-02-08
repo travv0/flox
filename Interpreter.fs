@@ -47,23 +47,18 @@ let private call token literal args =
         runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
     | _ -> typeError "function" literal token.Line
 
-let private lookUpVariable env name expr =
-    match locals.TryGetValue(expr) with
-    | true, distance -> Environment.getAt distance name env
-    | false, _ -> Environment.getGlobal name env
-
-let rec private evaluate (env: Environment) =
+let rec private evaluate (env: list<Environment>) =
     function
     | Literal v -> v
 
-    | Variable name as expr -> lookUpVariable env name expr
+    | Variable token ->
+        match Environment.get token env with
+        | Some v -> v
+        | None -> Nil
 
     | Assign (token, expr) ->
-        let v = evaluate env expr
-
-        match locals.TryGetValue(expr) with
-        | true, distance -> Environment.assignAt distance token v env
-        | false, _ -> Environment.assignGlobal token v env
+        evaluate env expr
+        |> (fun v -> Environment.assign token v env)
 
     | Call (callee, token, argExprs) ->
         let fn = evaluate env callee
@@ -138,7 +133,7 @@ let rec private evaluate (env: Environment) =
 
 exception Return of Literal
 
-let rec private execute (env: Environment) =
+let rec private execute (env: list<Environment>) =
     function
     | If (cond, thenBranch, elseBranch) ->
         if isTruthy (evaluate env cond) then
@@ -165,7 +160,7 @@ let rec private execute (env: Environment) =
         |> (fun v -> Environment.define token v env)
     | Function (token, parameters, body) ->
         let call (args: list<Literal>) =
-            let env = Environment.extend env
+            let env = Environment.make () :: env
             List.iter2 (fun p a -> Environment.define p (Some a) env) parameters args
             let mutable ret = Nil
 
@@ -178,7 +173,7 @@ let rec private execute (env: Environment) =
 
         Environment.define token (Some(Literal.Function(token.Lexeme, List.length parameters, call))) env
     | Block statements ->
-        let env = Environment.extend env
+        let env = Environment.make () :: env
 
         for statement in statements do
             execute env statement
@@ -190,7 +185,7 @@ let environment =
 let interpret statements =
     try
         for statement in statements do
-            execute environment statement
+            execute [ environment ] statement
     with
     | RuntimeError (value, expected, line) ->
         match value with
