@@ -11,11 +11,12 @@ type RunType =
     | Ast
 
 let run runType source =
-    let tokens, scanErrs = Scanner.scan source
+    let tokens = Scanner.scan source
 
     if runType = Tokens then
-        if scanErrs.Length = 0 then
-            printfn "%A" tokens
+        if not (Error.Occurred()) then
+            for token in tokens do
+                printfn "%A" token
     else
         let ast = tokens |> Parser.parse
         Resolver.resolve ast
