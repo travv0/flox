@@ -4,11 +4,13 @@ open System
 
 open Token
 
-type Literal =
+type Environment = list<Map<string, ref<Literal>>>
+
+and Literal =
     | Bool of bool
     | String of string
     | Number of float
-    | Function of string * int * (list<Literal> -> Literal)
+    | Function of string * int * Environment * (list<Literal> -> Environment -> Literal)
     | Nil
 
     override this.ToString() =
@@ -17,7 +19,7 @@ type Literal =
         | Bool false -> "false"
         | String s -> $"\"%s{s}\""
         | Number n -> string n
-        | Function (name, _, _) -> $"<fn %s{name}>"
+        | Function (name, _, _, _) -> $"<fn %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =

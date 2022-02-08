@@ -1,40 +1,61 @@
 [<RequireQualifiedAccess>]
 module Environment
 
-open System.Collections.Generic
 open Ast
 open Error
 open Token
 
-type Environment = Dictionary<string, option<Literal>>
+type Environment(env) =
+    let mutable environment: Ast.Environment = env
 
-let make () = Environment()
+    new() = Environment([ Map.empty ])
 
-let defineGlobal name value (env: Environment) =
-    env.Add(name, Some value)
-    env
+    member _.Get() = environment
 
-let define token value (env: list<Environment>) =
-    match env with
-    | [] -> raise <| FatalError("No environment.")
-    | e :: _ ->
-        if not (e.TryAdd(token.Lexeme, value)) then
-            e.[token.Lexeme] <- value
+    member _.Push() = environment <- Map.empty :: environment
+    member _.Pop() = environment <- List.tail environment
 
-let rec assign token value (env: list<Environment>) =
-    match env with
-    | [] -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
-    | e :: enclosing ->
-        if (e.ContainsKey(token.Lexeme)) then
-            e.[token.Lexeme] <- Some value
-            value
-        else
-            assign token value enclosing
+    member _.DefineGlobal(name, fn) : unit =
+        let rec loop =
+            function
+            | _, [] -> raise <| FatalError("No environment")
+            | seen, [ env ] ->
+                environment <-
+                    List.rev seen
+                    @ [ Map.add name (ref (fn name [ env ])) env ]
+            | seen, env :: envs -> loop (env :: seen, envs)
 
-let rec get token (env: list<Environment>) =
-    match env with
-    | [] -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
-    | e :: enclosing ->
-        match e.TryGetValue(token.Lexeme) with
-        | true, value -> value
-        | false, _ -> get token enclosing
+        loop ([], environment)
+
+    member _.Define(token, value) : unit =
+        if List.length environment > 1
+           && Map.containsKey token.Lexeme (List.head environment) then
+            runtimeError $"Already a variable named '%s{token.Lexeme}' in this scope." token.Line
+
+        match environment with
+        | [] -> raise <| FatalError("No environment.")
+        | env :: envs -> environment <- Map.add token.Lexeme (ref value) env :: envs
+
+    member _.Assign(token, value) : Literal =
+        let rec loop =
+            function
+            | ([]: Ast.Environment) -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
+            | env :: envs ->
+                if (env.ContainsKey(token.Lexeme)) then
+                    env.[token.Lexeme].Value <- value
+                    value
+                else
+                    loop envs
+
+        loop environment
+
+    member _.Get(token) : Literal =
+        let rec loop =
+            function
+            | ([]: Ast.Environment) -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
+            | env :: envs ->
+                match env.TryGetValue(token.Lexeme) with
+                | true, { contents = value } -> value
+                | false, _ -> loop envs
+
+        loop environment

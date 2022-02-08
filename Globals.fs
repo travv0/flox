@@ -5,11 +5,12 @@ module Globals
 open Ast
 open System
 
-let clock =
+let clock name env =
     Literal.Function(
-        "clock",
+        name,
         0,
-        (fun [] ->
+        env,
+        (fun [] env ->
             Number
             <| (float (DateTimeOffset.Now.ToUnixTimeMilliseconds()))
                / 1000.0)

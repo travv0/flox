@@ -1,193 +1,191 @@
 module Interpreter
 
 open System
-open System.Collections.Generic
 
 open Token
 open Ast
 open Error
 
-type Environment = Environment.Environment
+type private Environment = Environment.Environment
 
-let locals = Dictionary<Expr, int>()
+exception Return of Token * Literal
 
-let resolve expr depth = locals.Add(expr, depth)
+type Interpreter(env) =
+    let env: Environment = env
 
-let private equal left right =
-    match left, right with
-    | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
-    | Number left, Number right -> left = right
-    | Bool left, Bool right -> left = right
-    | String left, String right -> left = right
-    | Nil, Nil -> true
-    | _, _ -> false
+    do env.DefineGlobal("clock", Globals.clock)
 
-let private notEqual left right =
-    match left, right with
-    | Number left, Number right -> left <> right
-    | Bool left, Bool right -> left <> right
-    | String left, String right -> left <> right
-    | Nil, Nil -> false
-    | _, _ -> true
+    let equal left right =
+        match left, right with
+        | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
+        | Number left, Number right -> left = right
+        | Bool left, Bool right -> left = right
+        | String left, String right -> left = right
+        | Nil, Nil -> true
+        | _, _ -> false
 
-let private isTruthy =
-    function
-    | Nil -> false
-    | Bool v -> v
-    | _ -> true
+    let notEqual left right =
+        match left, right with
+        | Number left, Number right -> left <> right
+        | Bool left, Bool right -> left <> right
+        | String left, String right -> left <> right
+        | Nil, Nil -> false
+        | _, _ -> true
 
-let private typeError expected value line =
-    raise
-    <| RuntimeError(Some value, $"Expect %s{expected}.", line)
+    let isTruthy =
+        function
+        | Nil -> false
+        | Bool v -> v
+        | _ -> true
 
-let private call token literal args =
-    match literal with
-    | Literal.Function (_, arity, fn) when List.length args = arity -> fn args
-    | Literal.Function (_, arity, _) ->
-        runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
-    | _ -> typeError "function" literal token.Line
+    let typeError expected value line =
+        raise
+        <| RuntimeError(Some value, $"Expect %s{expected}.", line)
 
-let rec private evaluate (env: list<Environment>) =
-    function
-    | Literal v -> v
+    let call token literal args =
+        match literal with
+        | Literal.Function (_, arity, env, fn) when List.length args = arity -> fn args env
+        | Literal.Function (_, arity, _, _) ->
+            runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
+        | _ -> typeError "function" literal token.Line
 
-    | Variable token ->
-        match Environment.get token env with
-        | Some v -> v
-        | None -> Nil
+    let rec evaluate =
+        function
+        | Literal v -> v
 
-    | Assign (token, expr) ->
-        evaluate env expr
-        |> (fun v -> Environment.assign token v env)
+        | Variable token -> env.Get(token)
 
-    | Call (callee, token, argExprs) ->
-        let fn = evaluate env callee
-        let args = List.map (evaluate env) argExprs
-        call token fn args
+        | Assign (token, expr) -> evaluate expr |> (fun v -> env.Assign(token, v))
 
-    | Grouping expr -> evaluate env expr
+        | Call (callee, token, argExprs) ->
+            let fn = evaluate callee
+            let args = List.map evaluate argExprs
+            call token fn args
 
-    | Unary (({ Line = line }, Minus), expr) ->
-        match evaluate env expr with
-        | Number n -> Number -n
-        | v -> typeError "number" v line
+        | Grouping expr -> evaluate expr
 
-    | Unary ((_, Bang), expr) ->
-        let right = evaluate env expr
-        Bool(not (isTruthy right))
+        | Unary (({ Line = line }, Minus), expr) ->
+            match evaluate expr with
+            | Number n -> Number -n
+            | v -> typeError "number" v line
 
-    | Binary (left, ({ Line = line }, op), right) ->
-        match evaluate env left, op, evaluate env right with
-        | Number left, BinaryOp.Minus, Number right -> Number(left - right)
-        | Number left, Slash, Number right -> Number(left / right)
-        | Number left, Star, Number right -> Number(left * right)
+        | Unary ((_, Bang), expr) ->
+            let right = evaluate expr
+            Bool(not (isTruthy right))
 
-        | Number _, BinaryOp.Minus, badRight
-        | Number _, Slash, badRight
-        | Number _, Star, badRight -> typeError "number" badRight line
+        | Binary (left, ({ Line = line }, op), right) ->
+            match evaluate left, op, evaluate right with
+            | Number left, BinaryOp.Minus, Number right -> Number(left - right)
+            | Number left, Slash, Number right -> Number(left / right)
+            | Number left, Star, Number right -> Number(left * right)
 
-        | badLeft, BinaryOp.Minus, _
-        | badLeft, Slash, _
-        | badLeft, Star, _ -> typeError "number" badLeft line
+            | Number _, BinaryOp.Minus, badRight
+            | Number _, Slash, badRight
+            | Number _, Star, badRight -> typeError "number" badRight line
 
-        | Number left, Plus, Number right -> Number(left + right)
-        | String left, Plus, String right -> String(left + right)
+            | badLeft, BinaryOp.Minus, _
+            | badLeft, Slash, _
+            | badLeft, Star, _ -> typeError "number" badLeft line
 
-        | Number _, Plus, badRight -> typeError "number" badRight line
-        | String _, Plus, badRight -> typeError "string" badRight line
-        | badLeft, Plus, _ -> typeError "number or string" badLeft line
+            | Number left, Plus, Number right -> Number(left + right)
+            | String left, Plus, String right -> String(left + right)
 
-        | Number left, Greater, Number right -> Bool(left > right)
-        | Number left, GreaterEqual, Number right -> Bool(left >= right)
-        | Number left, Less, Number right -> Bool(left < right)
-        | Number left, LessEqual, Number right -> Bool(left <= right)
+            | Number _, Plus, badRight -> typeError "number" badRight line
+            | String _, Plus, badRight -> typeError "string" badRight line
+            | badLeft, Plus, _ -> typeError "number or string" badLeft line
 
-        | Number _, Greater, badRight
-        | Number _, GreaterEqual, badRight
-        | Number _, Less, badRight
-        | Number _, LessEqual, badRight -> typeError "number" badRight line
+            | Number left, Greater, Number right -> Bool(left > right)
+            | Number left, GreaterEqual, Number right -> Bool(left >= right)
+            | Number left, Less, Number right -> Bool(left < right)
+            | Number left, LessEqual, Number right -> Bool(left <= right)
 
-        | badLeft, Greater, _
-        | badLeft, GreaterEqual, _
-        | badLeft, Less, _
-        | badLeft, LessEqual, _ -> typeError "number" badLeft line
+            | Number _, Greater, badRight
+            | Number _, GreaterEqual, badRight
+            | Number _, Less, badRight
+            | Number _, LessEqual, badRight -> typeError "number" badRight line
 
-        | left, BangEqual, right -> Bool(notEqual left right)
-        | left, EqualEqual, right -> Bool(equal left right)
+            | badLeft, Greater, _
+            | badLeft, GreaterEqual, _
+            | badLeft, Less, _
+            | badLeft, LessEqual, _ -> typeError "number" badLeft line
 
-    | Logical (leftExpr, ({ Line = line }, And), rightExpr) ->
-        let left = evaluate env leftExpr
+            | left, BangEqual, right -> Bool(notEqual left right)
+            | left, EqualEqual, right -> Bool(equal left right)
 
-        if isTruthy left then
-            evaluate env rightExpr
-        else
-            left
+        | Logical (leftExpr, ({ Line = line }, And), rightExpr) ->
+            let left = evaluate leftExpr
 
-    | Logical (leftExpr, ({ Line = line }, Or), rightExpr) ->
-        let left = evaluate env leftExpr
+            if isTruthy left then
+                evaluate rightExpr
+            else
+                left
 
-        if isTruthy left then
-            left
-        else
-            evaluate env rightExpr
+        | Logical (leftExpr, ({ Line = line }, Or), rightExpr) ->
+            let left = evaluate leftExpr
 
-exception Return of Literal
+            if isTruthy left then
+                left
+            else
+                evaluate rightExpr
 
-let rec private execute (env: list<Environment>) =
-    function
-    | If (cond, thenBranch, elseBranch) ->
-        if isTruthy (evaluate env cond) then
-            execute env thenBranch
-        else
-            elseBranch |> Option.iter (execute env)
-    | Expression expr -> evaluate env expr |> ignore
-    | Print expr ->
-        evaluate env expr
-        |> fun v -> v.Display() |> printfn "%s"
-    | Stmt.Return (_, expr) ->
-        let value =
-            expr
-            |> Option.map (evaluate env)
+    member private this.Execute =
+        function
+        | If (cond, thenBranch, elseBranch) ->
+            if isTruthy (evaluate cond) then
+                this.Execute(thenBranch)
+            else
+                elseBranch |> Option.iter this.Execute
+        | Expression expr -> evaluate expr |> ignore
+        | Print expr ->
+            evaluate expr
+            |> fun v -> v.Display() |> printfn "%s"
+        | Stmt.Return (token, expr) ->
+            let value =
+                expr
+                |> Option.map evaluate
+                |> Option.defaultValue Nil
+
+            raise <| Return(token, value)
+        | While (cond, body) ->
+            while isTruthy (evaluate cond) do
+                this.Execute(body)
+        | Var (token, binding) ->
+            binding
+            |> Option.map evaluate
             |> Option.defaultValue Nil
+            |> (fun v -> env.Define(token, v))
+        | Function (token, parameters, body) ->
+            let call (args: list<Literal>) (env: Ast.Environment) =
+                let newEnv = Environment(Map.empty :: env)
+                List.iter2 (fun p a -> newEnv.Define(p, a)) parameters args
 
-        raise <| Return(value)
-    | While (cond, body) ->
-        while isTruthy (evaluate env cond) do
-            execute env body
-    | Var (token, binding) ->
-        binding
-        |> Option.map (evaluate env)
-        |> (fun v -> Environment.define token v env)
-    | Function (token, parameters, body) ->
-        let call (args: list<Literal>) =
-            let env = Environment.make () :: env
-            List.iter2 (fun p a -> Environment.define p (Some a) env) parameters args
-            let mutable ret = Nil
+                try
+                    Interpreter(newEnv).Execute(body)
+                    Nil
+                with
+                | Return (token, value) -> value
 
-            try
-                execute env body
-            with
-            | Return (value) -> ret <- value
+            env.Define(token, Nil)
 
-            ret
+            env.Assign(token, Literal.Function(token.Lexeme, List.length parameters, env.Env(), call))
+            |> ignore
+        | Block statements ->
+            env.Push()
 
-        Environment.define token (Some(Literal.Function(token.Lexeme, List.length parameters, call))) env
-    | Block statements ->
-        let env = Environment.make () :: env
+            for statement in statements do
+                this.Execute(statement)
 
-        for statement in statements do
-            execute env statement
+            env.Pop()
 
-let environment =
-    Environment.make ()
-    |> Environment.defineGlobal "clock" Globals.clock
+    new() = Interpreter(Environment())
 
-let interpret statements =
-    try
-        for statement in statements do
-            execute [ environment ] statement
-    with
-    | RuntimeError (value, expected, line) ->
-        match value with
-        | Some value -> RuntimeError.Report(value, expected, line)
-        | None -> RuntimeError.Report(expected, line)
+    member this.Interpret(statements) =
+        try
+            for statement in statements do
+                this.Execute(statement)
+        with
+        | Return (token, _) -> RuntimeError.Report("Can't return from top-level code.", token.Line)
+        | RuntimeError (value, expected, line) ->
+            match value with
+            | Some value -> RuntimeError.Report(value, expected, line)
+            | None -> RuntimeError.Report(expected, line)

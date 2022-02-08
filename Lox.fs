@@ -4,11 +4,14 @@ open System
 open System.IO
 
 open Error
+open Interpreter
 
 type RunType =
     | Interpret
     | Tokens
     | Ast
+
+let interpreter = Interpreter()
 
 let run runType source =
     let tokens = Scanner.scan source
@@ -19,13 +22,12 @@ let run runType source =
                 printfn "%A" token
     else
         let ast = tokens |> Parser.parse
-        Resolver.resolve ast
 
         if not (Error.Occurred()) then
             if runType = Ast then
                 printfn "%A" ast
             else
-                Interpreter.interpret ast
+                interpreter.Interpret(ast)
 
 let runFile runType path =
     File.ReadAllText path |> run runType
