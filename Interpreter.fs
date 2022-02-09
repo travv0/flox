@@ -47,6 +47,7 @@ type Interpreter(env) =
         | Literal.Function (_, arity, env, fn) when List.length args = arity -> fn args env
         | Literal.Function (_, arity, _, _) ->
             runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
+        | Literal.Class (klass) -> Literal.Instance(klass)
         | _ -> typeError "function" literal token.Line
 
     let rec evaluate =
@@ -154,7 +155,7 @@ type Interpreter(env) =
             |> Option.map evaluate
             |> Option.defaultValue Nil
             |> (fun v -> env.Define(token, v))
-        | Function (LoxFunction (token, ``params``, body)) ->
+        | Function (Function.Function (token, ``params``, body)) ->
             let call (args: list<Literal>) (env: Ast.Environment) =
                 let newEnv = Environment(Map.empty :: env)
                 List.iter2 (fun p a -> newEnv.Define(p, a)) ``params`` args
@@ -176,6 +177,11 @@ type Interpreter(env) =
                 this.Execute(statement)
 
             env.Pop()
+        | Class (token, methods) ->
+            env.Define(token, Nil)
+
+            env.Assign(token, Literal.Class(Class.Class(token.Lexeme, env.Get())))
+            |> ignore
 
     new() = Interpreter(Environment())
 

@@ -89,6 +89,9 @@ type Parser(tokens) =
             | TokenType.Var ->
                 skipOne ()
                 varDeclaration ()
+            | TokenType.Class ->
+                skipOne ()
+                classDeclaration ()
             | TokenType.Fun ->
                 skipOne ()
                 Function(funDeclaration "function")
@@ -113,14 +116,29 @@ type Parser(tokens) =
         consume Semicolon "Expect ';' after variable declaration."
         Stmt.Var(identifier, value)
 
-    and funDeclaration (kind: string) : LoxFunction =
+    and classDeclaration () : Stmt =
+        let name =
+            parse [ Identifier ] "Expect class name."
+
+        consume LeftBrace "Expect '{' before class body."
+        let mthds = methods ()
+        consume RightBrace "Expect '}' after class body."
+        Class(name, mthds)
+
+    and methods () : list<Function> =
+        match (peek ()).Type with
+        | RightBrace -> []
+        | Eof -> []
+        | _ -> funDeclaration "method" :: methods ()
+
+    and funDeclaration (kind: string) : Function =
         let identifier =
             parse [ Identifier ] $"Expect %s{kind} name."
 
         consume LeftParen $"Expect '(' after %s{kind} name."
         let ``params`` = parameters ()
         consume LeftBrace $"Expect '{{' before %s{kind} body."
-        LoxFunction(identifier, ``params``, block ())
+        Function.Function(identifier, ``params``, block ())
 
     and parameters () : list<Token> =
         let next = parseOne ()

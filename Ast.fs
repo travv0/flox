@@ -10,6 +10,8 @@ type Literal =
     | String of str: string
     | Number of num: float
     | Function of name: string * arity: int * env: Environment * fn: (list<Literal> -> Environment -> Literal)
+    | Class of classClass: Class
+    | Instance of instanceClass: Class
     | Nil
 
     override this.ToString() =
@@ -19,6 +21,8 @@ type Literal =
         | String s -> $"\"%s{s}\""
         | Number n -> string n
         | Function (name, _, _, _) -> $"<fn %s{name}>"
+        | Class (Class.Class (name, _)) -> $"<class %s{name}>"
+        | Instance (Class.Class (name, _)) -> $"<instance %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -27,6 +31,8 @@ type Literal =
         | v -> v.ToString()
 
 and Environment = list<Map<string, ref<Literal>>>
+
+and Class = Class of string * Environment
 
 [<Struct>]
 type BinaryOp =
@@ -87,14 +93,15 @@ type Expr =
     interface IEquatable<Expr> with
         member this.Equals(other) = obj.ReferenceEquals(this, other)
 
-type LoxFunction = LoxFunction of Token * list<Token> * Stmt
+type Function = Function of Token * list<Token> * Stmt
 
 and Stmt =
     | Expression of Expr
-    | Function of LoxFunction
+    | Function of Function
     | If of Expr * Stmt * option<Stmt>
     | Print of Expr
     | Return of Token * option<Expr>
     | Var of Token * option<Expr>
     | While of Expr * Stmt
     | Block of list<Stmt>
+    | Class of Token * list<Function>
