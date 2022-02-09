@@ -4,13 +4,12 @@ open System
 
 open Token
 
-type Environment = list<Map<string, ref<Literal>>>
-
-and Literal =
-    | Bool of bool
-    | String of string
-    | Number of float
-    | Function of string * int * Environment * (list<Literal> -> Environment -> Literal)
+[<Struct>]
+type Literal =
+    | Bool of bool: bool
+    | String of str: string
+    | Number of num: float
+    | Function of name: string * arity: int * env: Environment * fn: (list<Literal> -> Environment -> Literal)
     | Nil
 
     override this.ToString() =
@@ -27,6 +26,9 @@ and Literal =
         | String s -> $"%s{s}"
         | v -> v.ToString()
 
+and Environment = list<Map<string, ref<Literal>>>
+
+[<Struct>]
 type BinaryOp =
     | Plus
     | BangEqual
@@ -54,6 +56,7 @@ module BinaryOp =
         | TokenType.Star -> Some Star
         | _ -> None
 
+[<Struct>]
 type LogicalOp =
     | And
     | Or
@@ -65,6 +68,7 @@ module LogicalOp =
         | TokenType.Or -> Some Or
         | _ -> None
 
+[<Struct>]
 type UnaryOp =
     | Minus
     | Bang

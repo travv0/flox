@@ -167,7 +167,7 @@ type Interpreter(env) =
 
             env.Define(token, Nil)
 
-            env.Assign(token, Literal.Function(token.Lexeme, List.length parameters, env.Env(), call))
+            env.Assign(token, Literal.Function(token.Lexeme, List.length parameters, env.Get(), call))
             |> ignore
         | Block statements ->
             env.Push()
