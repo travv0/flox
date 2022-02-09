@@ -66,7 +66,7 @@ type private Scanner(source) =
 
     let consume char message =
         if scanOne () <> Some char then
-            Error.Report(line, message)
+            Error.Report(Some line, message)
 
     let scanNumber (first: char) =
         let wholePart =
@@ -131,7 +131,7 @@ type private Scanner(source) =
         | Some c, _ when Char.IsDigit(c) -> scanNumber c
         | Some c, _ when Char.IsLetter(c) || c = '_' -> scanIdentifier c
 
-        | Some c, _ -> Error.Report(line, $"Unexpected character: '%c{c}'")
+        | Some c, _ -> Error.Report(Some line, $"Unexpected character: '%c{c}'")
         | None, _ -> failwith "Unexpected end of file."
 
     member this.ScanTokens() : list<Token> =

@@ -87,9 +87,11 @@ type Expr =
     interface IEquatable<Expr> with
         member this.Equals(other) = obj.ReferenceEquals(this, other)
 
-type Stmt =
+type LoxFunction = LoxFunction of Token * list<Token> * Stmt
+
+and Stmt =
     | Expression of Expr
-    | Function of Token * list<Token> * Stmt
+    | Function of LoxFunction
     | If of Expr * Stmt * option<Stmt>
     | Print of Expr
     | Return of Token * option<Expr>

@@ -4,189 +4,226 @@ open Error
 open Token
 open Ast
 
-let private parseError (token: Token) tokens message =
-    Error.Report(token, message)
-    ParseError(tokens)
+let (<*) a b =
+    let result = a
+    b
+    a
 
-let private eofError () =
-    raise
-    <| parseError (eof 0) [] "Unexpected end of file."
+type Parser(tokens) =
+    let mutable tokens = tokens
 
-let private consume type_ message tokens =
-    match tokens with
-    | token :: rest when token.Type = type_ -> rest
-    | token :: rest -> raise <| parseError token rest message
-    | _ -> eofError ()
+    let parseError (token: option<Token>) message =
+        Error.Report(token, message)
+        ParseError(tokens)
 
-let private synchronize tokens : list<Token> =
-    let isStatementStart token =
-        match token.Type with
-        | TokenType.Class
-        | TokenType.Fun
-        | TokenType.Var
-        | TokenType.For
-        | TokenType.If
-        | TokenType.While
-        | TokenType.Print
-        | TokenType.Return -> true
-        | _ -> false
+    let logError (token: option<Token>) message = parseError token message |> ignore
 
-    let rest =
-        List.skipWhile
-            (fun token ->
-                token.Type <> TokenType.Eof
-                && token.Type <> TokenType.Semicolon
-                && not (isStatementStart token))
-            tokens
+    let raiseError (token: option<Token>) message = raise <| parseError token message
 
-    match rest with
-    | { Type = Semicolon } :: rest -> rest
-    | _ -> rest
+    let eofError () =
+        raiseError None "Unexpected end of file."
 
-module private Grammar =
-    type StmtResult = Stmt * list<Token>
-    type ExprResult = Expr * list<Token>
+    let parseOne () =
+        match List.splitAt 1 tokens with
+        | [ token ], rest ->
+            tokens <- rest
+            token
+        | _ -> raiseError None "Unexpected end of file"
 
-    let rec declaration tokens =
-        try
-            match tokens with
-            | { Type = TokenType.Var } :: rest -> varDeclaration rest
-            | { Type = TokenType.Fun } :: rest -> funDeclaration "function" rest
-            | _ -> statement tokens
-            |> fun (a, b) -> Some a, b
-        with
-        | ParseError rest -> None, synchronize rest
+    let skipOne () : unit =
+        match List.splitAt 1 tokens with
+        | [ _ ], rest -> tokens <- rest
+        | _ -> raiseError None "Unexpected end of file"
 
-    and varDeclaration tokens : StmtResult =
+    let consume type_ message : unit =
+        let token = parseOne ()
+
+        if token.Type <> type_ then
+            raiseError (Some token) message
+
+    //     let synchronize () : unit =
+//         let isStatementStart token =
+//             match token.Type with
+//             | TokenType.Class
+//             | TokenType.Fun
+//             | TokenType.Var
+//             | TokenType.For
+//             | TokenType.If
+//             | TokenType.While
+//             | TokenType.Print
+//             | TokenType.Return -> true
+//             | _ -> false
+//
+//         let rest =
+//             List.skipWhile
+//                 (fun token ->
+//                     token.Type <> TokenType.Eof
+//                     && token.Type <> TokenType.Semicolon
+//                     && not (isStatementStart token))
+//                 tokens
+//
+//         match rest with
+//         | { Type = Semicolon } :: rest -> rest
+//         | _ -> rest
+
+    let peek () =
         match tokens with
-        | ({ Type = Identifier } as token) :: { Type = Equal } :: rest ->
-            let initializer, rest = expression rest
-            Stmt.Var(token, Some initializer), consume Semicolon "Expect ';' after variable declaration." rest
-        | ({ Type = Identifier } as token) :: rest ->
-            Stmt.Var(token, None), consume Semicolon "Expect ';' after variable declaration." rest
-        | token :: rest ->
-            raise
-            <| parseError token rest "Expect variable name."
-        | _ -> eofError ()
+        | token :: _ -> token
+        | _ -> raiseError None "Unexpected end of file."
 
-    and funDeclaration (kind: string) tokens : StmtResult =
-        match tokens with
-        | ({ Type = Identifier } as ident) :: rest ->
-            let rest =
-                consume LeftParen $"Expect '(' after %s{kind} name." rest
+    let parse types message =
+        let token = peek ()
 
-            let paramList, rest = parameters rest
+        if List.contains token.Type types then
+            parseOne ()
+        else
+            raiseError (Some token) message
 
-            let rest =
-                consume LeftBrace $"Expect '{{' before %s{kind} body." rest
+    let tryParse types =
+        let token = peek ()
 
-            let body, rest = block rest
-            Stmt.Function(ident, paramList, body), rest
-        | token :: rest ->
-            raise
-            <| parseError token rest $"Expect %s{kind} name."
-        | _ -> eofError ()
+        if List.contains token.Type types then
+            parseOne () |> Some
+        else
+            None
 
-    and parameters tokens : list<Token> * list<Token> =
-        match tokens with
-        | { Type = RightParen } :: rest -> [], rest
-        | ({ Type = Identifier } as param) :: rest ->
-            let rec parameters' tokens =
-                match tokens with
-                | { Type = Comma } :: ({ Type = Identifier } as param) :: rest ->
-                    parameters' rest
-                    |> fun (parameters, rest) ->
-                        if List.length parameters >= 255 then
-                            parseError (List.head rest) rest "Can't have more than 255 parameters."
-                            |> ignore
+    let rec declaration () =
+        // try
+        match peek().Type with
+        | TokenType.Var ->
+            skipOne ()
+            varDeclaration ()
+        | TokenType.Fun ->
+            skipOne ()
+            Function(funDeclaration "function")
+        | _ -> statement ()
+    // with
+    // | ParseError rest -> synchronize ()
 
-                        param :: parameters, rest
-                | _ -> [], consume RightParen "Expect ')' after parameters." tokens
+    and varDeclaration () : Stmt =
+        let identifier =
+            parse [ Identifier ] "Expect variable name."
 
-            parameters' rest
-            |> fun (parameters, rest) -> param :: parameters, rest
-        | token :: rest ->
-            raise
-            <| parseError token rest "Expect ')' or parameter."
-        | _ -> eofError ()
+        let value =
+            match peek().Type with
+            | Equal ->
+                skipOne ()
+                Some <| expression ()
+            | _ -> None
 
-    and statement tokens : StmtResult =
-        match tokens with
-        | { Type = TokenType.For } :: rest -> forStatement rest
-        | { Type = TokenType.If } :: rest -> ifStatement rest
-        | { Type = TokenType.While } :: rest -> whileStatement rest
-        | ({ Type = TokenType.Return } as token) :: rest -> returnStatement token rest
-        | { Type = TokenType.Print } :: rest -> printStatement rest
-        | { Type = TokenType.LeftBrace } :: rest -> block rest
-        | _ -> expressionStatement tokens
+        consume Semicolon "Expect ';' after variable declaration."
+        Stmt.Var(identifier, value)
 
-    and returnStatement keyword tokens : StmtResult =
-        let value, rest =
-            match tokens with
-            | { Type = Semicolon } :: rest -> None, rest
-            | tokens ->
-                let value, rest = expression tokens
-                Some value, consume Semicolon "Expect ';' after return value." rest
+    and funDeclaration (kind: string) : LoxFunction =
+        let identifier =
+            parse [ Identifier ] $"Expect %s{kind} name."
 
-        Stmt.Return(keyword, value), rest
+        consume LeftParen $"Expect '(' after %s{kind} name."
+        let ``params`` = parameters ()
+        consume LeftBrace $"Expect '{{' before %s{kind} body."
+        LoxFunction(identifier, ``params``, block ())
 
-    and ifStatement tokens : StmtResult =
-        let rest =
-            consume LeftParen "Expect '(' after 'if'." tokens
+    and parameters () : list<Token> =
+        let next = parseOne ()
 
-        let condition, rest = expression rest
+        match next.Type with
+        | RightParen -> []
+        | Identifier ->
+            let afterIdent = parseOne ()
 
-        let rest =
-            consume RightParen "Expect ')' after if condition." rest
+            match afterIdent.Type with
+            | Comma ->
+                let ``params`` = parameters ()
 
-        let thenBranch, rest = statement rest
+                if List.length ``params`` >= 255 then
+                    runtimeError "Can't have more than 255 parameters." (peek ()).Line
 
-        let elseBranch, rest =
-            match rest with
-            | { Type = Else } :: rest -> statement rest |> fun (s, r) -> Some s, r
-            | _ -> None, rest
+                next :: ``params``
+            | RightParen -> [ next ]
+            | _ -> raiseError (Some afterIdent) "Expect ')' after parameters."
+        | _ -> raiseError (Some next) "Expect ')' or parameter."
 
-        Stmt.If(condition, thenBranch, elseBranch), rest
+    and statement () : Stmt =
+        match peek().Type with
+        | TokenType.For ->
+            skipOne ()
+            forStatement ()
+        | TokenType.If ->
+            skipOne ()
+            ifStatement ()
+        | TokenType.While ->
+            skipOne ()
+            whileStatement ()
+        | TokenType.Return ->
+            skipOne ()
+            returnStatement ()
+        | TokenType.Print ->
+            skipOne ()
+            printStatement ()
+        | TokenType.LeftBrace ->
+            skipOne ()
+            block ()
+        | _ -> expressionStatement ()
 
-    and whileStatement tokens : StmtResult =
-        let rest =
-            consume LeftParen "Expect '(' after 'while'." tokens
+    and returnStatement () : Stmt =
+        let next = peek ()
 
-        let condition, rest = expression rest
+        match next.Type with
+        | Semicolon ->
+            skipOne ()
+            Stmt.Return(next, None)
+        | _ ->
+            let expr = expression ()
+            consume Semicolon "Expect ';' after return statement."
+            Stmt.Return(next, Some expr)
 
-        let rest =
-            consume RightParen "Expect ')' after while condition." rest
+    and ifStatement () : Stmt =
+        consume LeftParen "Expect '(' after 'if'."
+        let condition = expression ()
+        consume RightParen "Expect ')' after if condition."
+        let thenBranch = statement ()
 
-        let body, rest = statement rest
-        Stmt.While(condition, body), rest
+        let elseBranch =
+            match peek().Type with
+            | Else ->
+                skipOne ()
+                Some(statement ())
+            | _ -> None
 
-    and forStatement tokens : StmtResult =
-        let rest =
-            consume LeftParen "Expect '(' after 'for'." tokens
+        Stmt.If(condition, thenBranch, elseBranch)
 
-        let initializer, rest =
-            match rest with
-            | { Type = Semicolon } :: rest -> None, rest
-            | { Type = TokenType.Var } :: rest -> varDeclaration rest |> fun (d, r) -> Some d, r
+    and whileStatement () : Stmt =
+        consume LeftParen "Expect '(' after 'while'."
+        let condition = expression ()
+        consume RightParen "Expect ')' after while condition."
+        Stmt.While(condition, statement ())
+
+    and forStatement () : Stmt =
+        consume LeftParen "Expect '(' after 'for'."
+
+        let initializer =
+            match peek().Type with
+            | Semicolon -> None
+            | TokenType.Var ->
+                skipOne ()
+                varDeclaration () |> Some
+            | _ -> expressionStatement () |> Some
+
+        let condition =
+            match peek().Type with
+            | Semicolon -> None
             | _ ->
-                expressionStatement rest
-                |> fun (e, r) -> Some e, r
+                Some <| expression ()
+                <* consume Semicolon "Expect ';' after loop condition."
 
-        let condition, rest =
-            match rest with
-            | { Type = Semicolon } :: rest -> None, rest
+        let increment =
+            match peek().Type with
+            | RightParen -> None
             | _ ->
-                expression rest
-                |> fun (e, r) -> Some e, consume Semicolon "Expect ';' after loop condition." r
+                Some <| expression ()
+                <* consume RightParen "Expect ')' after for clauses."
 
-        let increment, rest =
-            match rest with
-            | { Type = RightParen } :: rest -> None, rest
-            | _ ->
-                expression rest
-                |> fun (e, r) -> Some e, consume RightParen "Expect ')' after for clauses." r
-
-        let body, rest = statement rest
+        let body = statement ()
 
         let body =
             match increment with
@@ -198,137 +235,143 @@ module private Grammar =
             | None -> Stmt.While(Literal(Bool(true)), body)
             | Some cond -> Stmt.While(cond, body)
 
-        let body =
-            match initializer with
-            | None -> body
-            | Some init -> Stmt.Block([ init; body ])
+        match initializer with
+        | None -> body
+        | Some init -> Stmt.Block([ init; body ])
 
-        body, rest
-
-    and block tokens : StmtResult =
+    and block () : Stmt =
         let statements = ResizeArray()
-        let mutable rest = tokens
 
-        while rest.Head.Type <> RightBrace
-              && rest.Head.Type <> Eof do
-            let decl, r = declaration rest
-            decl |> Option.iter statements.Add
-            rest <- r
+        while tokens.Head.Type <> RightBrace
+              && tokens.Head.Type <> Eof do
+            statements.Add(declaration ())
 
-        Stmt.Block(statements |> List.ofSeq), consume RightBrace "Expect '}' after block." rest
+        Stmt.Block(statements |> List.ofSeq)
+        <* consume RightBrace "Expect '}' after block."
 
-    and printStatement tokens : StmtResult =
-        let value, rest = expression tokens
-        Stmt.Print(value), consume Semicolon "Expect ';' after value." rest
+    and printStatement () : Stmt =
+        Stmt.Print(expression ())
+        <* consume Semicolon "Expect ';' after value."
 
-    and expressionStatement tokens : StmtResult =
-        let expr, rest = expression tokens
-        Stmt.Expression(expr), consume Semicolon "Expect ';' after expression." rest
+    and expressionStatement () : Stmt =
+        Stmt.Expression(expression ())
+        <* consume Semicolon "Expect ';' after expression."
 
-    and expression tokens : ExprResult = assignment tokens
+    and expression () : Expr = assignment ()
 
-    and assignment tokens : ExprResult =
-        let expr, rest = logicOr tokens
+    and assignment () : Expr =
+        let expr = logicOr ()
+        let next = peek ()
 
-        match rest with
-        | ({ Type = Equal } as equals) :: rest ->
-            let value, rest = assignment rest
+        match next.Type with
+        | Equal ->
+            let value =
+                skipOne ()
+                assignment ()
 
             match expr with
-            | Variable v -> Expr.Assign(v, value), rest
+            | Variable v -> Expr.Assign(v, value)
             | _ ->
-                parseError equals rest "Invalid assignment target"
-                |> ignore
+                logError (Some next) "Invalid assignment target"
+                expr
+        | _ -> expr
 
-                expr, rest
-        | _ -> expr, rest
+    and primary () : Expr =
+        let token = parseOne ()
 
-    and primary tokens : ExprResult =
-        match tokens with
-        | { Type = False } :: rest -> Literal(Bool false), rest
-        | { Type = True } :: rest -> Literal(Bool true), rest
-        | { Type = TokenType.Nil } :: rest -> Literal Nil, rest
-        | { Type = TokenType.String s } :: rest -> Literal(String s), rest
-        | { Type = TokenType.Number n } :: rest -> Literal(Number n), rest
-        | ({ Type = TokenType.Identifier } as token) :: rest -> Variable token, rest
-        | { Type = TokenType.LeftParen } :: rest ->
-            let expr, rest = expression rest
-            Grouping(expr), consume TokenType.RightParen "Expect ')' after expression." rest
-        | token :: rest ->
-            raise
-            <| parseError token rest "Expect expression."
-        | _ -> eofError ()
+        match token.Type with
+        | False -> Literal(Bool false)
+        | True -> Literal(Bool true)
+        | TokenType.Nil -> Literal Nil
+        | TokenType.String s -> Literal(String s)
+        | TokenType.Number n -> Literal(Number n)
+        | TokenType.Identifier -> Variable token
+        | TokenType.LeftParen ->
+            let expr = expression ()
 
-    and call tokens : ExprResult =
-        let mutable expr, rest = primary tokens
-        let mutable callsCompleted = false
+            Grouping(expr)
+            <* consume TokenType.RightParen "Expect ')' after expression."
+        | _ -> raiseError (Some token) "Expect expression."
 
-        while not callsCompleted do
-            match rest with
-            | ({ Type = LeftParen } as paren) :: rest' ->
-                let args, rest' = arguments rest'
-                expr <- Expr.Call(expr, paren, args)
-                rest <- rest'
-            | _ -> callsCompleted <- true
-
-        expr, rest
-
-    and arguments tokens : list<Expr> * list<Token> =
-        match tokens with
-        | { Type = RightParen } :: rest -> [], rest
-        | _ ->
-            let arg, rest = expression tokens
-
-            let rec arguments' tokens =
-                match tokens with
-                | { Type = Comma } :: rest ->
-                    let arg, rest = expression rest
-
-                    arguments' rest
-                    |> fun (args, rest) ->
-                        if List.length args >= 255 then
-                            parseError (List.head rest) rest "Can't have more than 255 arguments."
-                            |> ignore
-
-                        arg :: args, rest
-                | _ -> [], consume RightParen "Expect ')' after arguments." tokens
-
-            arguments' rest
-            |> fun (args, rest) -> arg :: args, rest
-
-    and unary tokens : ExprResult =
-        match tokens with
-        | ({ Type = TokenType.Bang } as operator) :: rest ->
-            let expr, rest = primary rest
-            Unary((operator, Bang), expr), rest
-        | ({ Type = TokenType.Minus } as operator) :: rest ->
-            let expr, rest = primary rest
-            Unary((operator, Minus), expr), rest
-        | _ -> call tokens
-
-    and bin cons ofToken nextPrec opTokens tokens : ExprResult =
+    // TODO refactor
+    and call () : Expr =
         let rec go expr =
-            function
-            | operator :: rest when List.contains operator.Type opTokens ->
+            let next = peek ()
+
+            match next.Type with
+            | LeftParen ->
+                let args =
+                    skipOne ()
+                    arguments ()
+
+                go (Expr.Call(expr, next, args))
+            | _ -> expr
+
+        let expr = primary ()
+        let next = peek ()
+
+        match next.Type with
+        | LeftParen ->
+            let args =
+                skipOne ()
+                arguments ()
+
+            go (Expr.Call(expr, next, args))
+        | _ -> expr
+
+    and arguments () : list<Expr> =
+        let next = parseOne ()
+
+        match next.Type with
+        | RightParen -> []
+        | Identifier ->
+            let arg = expression ()
+            let afterIdent = parseOne ()
+
+            match afterIdent.Type with
+            | Comma ->
+                let args = arguments ()
+
+                if List.length args >= 255 then
+                    runtimeError "Can't have more than 255 arguments." (peek ()).Line
+
+                arg :: args
+            | RightParen -> [ arg ]
+            | _ -> raiseError (Some afterIdent) "Expect ')' after arguments."
+        | _ -> raiseError (Some next) "Expect ')' or argument."
+
+    and unary () : Expr =
+        let op = peek ()
+
+        match op.Type with
+        | TokenType.Bang -> Unary((op, Bang), primary ())
+        | TokenType.Minus -> Unary((op, Minus), primary ())
+        | _ -> call ()
+
+    and bin cons ofToken nextPrec opTokens : Expr =
+        let rec go left =
+            let operator = tryParse opTokens
+
+            match operator with
+            | Some operator ->
                 match ofToken operator with
                 | Some op ->
-                    let right, rest = nextPrec rest
-                    go (cons (expr, (operator, op), right)) rest
-                | None -> expr, operator :: rest
-            | rest -> expr, rest
+                    let right = nextPrec ()
+                    go (cons (left, (operator, op), right))
+                | None -> left
+            | _ -> left
 
-        let expr, rest = nextPrec tokens
-        go expr rest
+        go <| nextPrec ()
 
     and binary = bin Binary BinaryOp.ofToken
 
-    and factor =
+    and factor () =
         binary unary [ TokenType.Slash; TokenType.Star ]
 
-    and term =
+    and term () =
         binary factor [ TokenType.Minus; TokenType.Plus ]
 
-    and comparison =
+    and comparison () =
         binary
             term
             [ TokenType.Greater
@@ -336,7 +379,7 @@ module private Grammar =
               TokenType.Less
               TokenType.LessEqual ]
 
-    and equality =
+    and equality () =
         binary
             comparison
             [ TokenType.BangEqual
@@ -344,17 +387,16 @@ module private Grammar =
 
     and logic = bin Logical LogicalOp.ofToken
 
-    and logicAnd = logic equality [ TokenType.And ]
+    and logicAnd () = logic equality [ TokenType.And ]
 
-    and logicOr = logic logicAnd [ TokenType.Or ]
+    and logicOr () = logic logicAnd [ TokenType.Or ]
 
-let parse tokens =
-    let rec go (tokens: list<Token>) =
+    member this.Parse() : list<Stmt> =
         match tokens with
         | [] -> []
         | [ { Type = Eof } ] -> []
         | _ ->
-            let stmt, rest = Grammar.declaration tokens
-            stmt :: go rest
+            let stmt = declaration ()
+            stmt :: this.Parse()
 
-    tokens |> List.ofSeq |> go |> List.choose id
+let parse tokens = Parser(tokens).Parse()

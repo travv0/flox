@@ -154,7 +154,7 @@ type Interpreter(env) =
             |> Option.map evaluate
             |> Option.defaultValue Nil
             |> (fun v -> env.Define(token, v))
-        | Function (token, parameters, body) ->
+        | Function (LoxFunction (token, parameters, body)) ->
             let call (args: list<Literal>) (env: Ast.Environment) =
                 let newEnv = Environment(Map.empty :: env)
                 List.iter2 (fun p a -> newEnv.Define(p, a)) parameters args
