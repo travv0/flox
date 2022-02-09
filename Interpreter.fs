@@ -154,10 +154,10 @@ type Interpreter(env) =
             |> Option.map evaluate
             |> Option.defaultValue Nil
             |> (fun v -> env.Define(token, v))
-        | Function (LoxFunction (token, parameters, body)) ->
+        | Function (LoxFunction (token, ``params``, body)) ->
             let call (args: list<Literal>) (env: Ast.Environment) =
                 let newEnv = Environment(Map.empty :: env)
-                List.iter2 (fun p a -> newEnv.Define(p, a)) parameters args
+                List.iter2 (fun p a -> newEnv.Define(p, a)) ``params`` args
 
                 try
                     Interpreter(newEnv).Execute(body)
@@ -167,7 +167,7 @@ type Interpreter(env) =
 
             env.Define(token, Nil)
 
-            env.Assign(token, Literal.Function(token.Lexeme, List.length parameters, env.Get(), call))
+            env.Assign(token, Literal.Function(token.Lexeme, List.length ``params``, env.Get(), call))
             |> ignore
         | Block statements ->
             env.Push()

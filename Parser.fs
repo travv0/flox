@@ -41,35 +41,34 @@ type Parser(tokens) =
         if token.Type <> type_ then
             raiseError (Some token) message
 
-    //     let synchronize () : unit =
-//         let isStatementStart token =
-//             match token.Type with
-//             | TokenType.Class
-//             | TokenType.Fun
-//             | TokenType.Var
-//             | TokenType.For
-//             | TokenType.If
-//             | TokenType.While
-//             | TokenType.Print
-//             | TokenType.Return -> true
-//             | _ -> false
-//
-//         let rest =
-//             List.skipWhile
-//                 (fun token ->
-//                     token.Type <> TokenType.Eof
-//                     && token.Type <> TokenType.Semicolon
-//                     && not (isStatementStart token))
-//                 tokens
-//
-//         match rest with
-//         | { Type = Semicolon } :: rest -> rest
-//         | _ -> rest
-
     let peek () =
         match tokens with
         | token :: _ -> token
         | _ -> raiseError None "Unexpected end of file."
+
+    let synchronize () : unit =
+        let isStatementStart token =
+            match token.Type with
+            | TokenType.Class
+            | TokenType.Fun
+            | TokenType.Var
+            | TokenType.For
+            | TokenType.If
+            | TokenType.While
+            | TokenType.Print
+            | TokenType.Return -> true
+            | _ -> false
+
+        tokens <-
+            List.skipWhile
+                (fun token ->
+                    token.Type <> TokenType.Eof
+                    && token.Type <> TokenType.Semicolon
+                    && not (isStatementStart token))
+                tokens
+
+        if peek().Type = Semicolon then
+            skipOne ()
 
     let parse types message =
         let token = peek ()
@@ -88,17 +87,20 @@ type Parser(tokens) =
             None
 
     let rec declaration () =
-        // try
-        match peek().Type with
-        | TokenType.Var ->
-            skipOne ()
-            varDeclaration ()
-        | TokenType.Fun ->
-            skipOne ()
-            Function(funDeclaration "function")
-        | _ -> statement ()
-    // with
-    // | ParseError rest -> synchronize ()
+        try
+            match peek().Type with
+            | TokenType.Var ->
+                skipOne ()
+                varDeclaration ()
+            | TokenType.Fun ->
+                skipOne ()
+                Function(funDeclaration "function")
+            | _ -> statement ()
+            |> Some
+        with
+        | ParseError rest ->
+            synchronize ()
+            None
 
     and varDeclaration () : Stmt =
         let identifier =
@@ -244,9 +246,9 @@ type Parser(tokens) =
 
         while tokens.Head.Type <> RightBrace
               && tokens.Head.Type <> Eof do
-            statements.Add(declaration ())
+            Option.iter statements.Add (declaration ())
 
-        Stmt.Block(statements |> List.ofSeq)
+        Stmt.Block(List.ofSeq statements)
         <* consume RightBrace "Expect '}' after block."
 
     and printStatement () : Stmt =
@@ -393,10 +395,10 @@ type Parser(tokens) =
 
     member this.Parse() : list<Stmt> =
         match tokens with
-        | [] -> []
         | [ { Type = Eof } ] -> []
         | _ ->
-            let stmt = declaration ()
-            stmt :: this.Parse()
+            match declaration () with
+            | Some stmt -> stmt :: this.Parse()
+            | None -> this.Parse()
 
 let parse tokens = Parser(tokens).Parse()
