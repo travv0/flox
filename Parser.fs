@@ -4,10 +4,7 @@ open Error
 open Token
 open Ast
 
-let (<*) a b =
-    let result = a
-    b
-    a
+let (<<.) a _ = a
 
 type Parser(tokens) =
     let mutable tokens = tokens
@@ -216,14 +213,14 @@ type Parser(tokens) =
             | Semicolon -> None
             | _ ->
                 Some <| expression ()
-                <* consume Semicolon "Expect ';' after loop condition."
+                <<. consume Semicolon "Expect ';' after loop condition."
 
         let increment =
             match peek().Type with
             | RightParen -> None
             | _ ->
                 Some <| expression ()
-                <* consume RightParen "Expect ')' after for clauses."
+                <<. consume RightParen "Expect ')' after for clauses."
 
         let body = statement ()
 
@@ -249,15 +246,15 @@ type Parser(tokens) =
             Option.iter statements.Add (declaration ())
 
         Stmt.Block(List.ofSeq statements)
-        <* consume RightBrace "Expect '}' after block."
+        <<. consume RightBrace "Expect '}' after block."
 
     and printStatement () : Stmt =
         Stmt.Print(expression ())
-        <* consume Semicolon "Expect ';' after value."
+        <<. consume Semicolon "Expect ';' after value."
 
     and expressionStatement () : Stmt =
         Stmt.Expression(expression ())
-        <* consume Semicolon "Expect ';' after expression."
+        <<. consume Semicolon "Expect ';' after expression."
 
     and expression () : Expr = assignment ()
 
@@ -292,7 +289,7 @@ type Parser(tokens) =
             let expr = expression ()
 
             Grouping(expr)
-            <* consume TokenType.RightParen "Expect ')' after expression."
+            <<. consume TokenType.RightParen "Expect ')' after expression."
         | _ -> raiseError (Some token) "Expect expression."
 
     // TODO refactor
@@ -322,11 +319,13 @@ type Parser(tokens) =
         | _ -> expr
 
     and arguments () : list<Expr> =
-        let next = parseOne ()
+        let next = peek ()
 
         match next.Type with
-        | RightParen -> []
-        | Identifier ->
+        | RightParen ->
+            skipOne ()
+            []
+        | _ ->
             let arg = expression ()
             let afterIdent = parseOne ()
 
@@ -340,7 +339,6 @@ type Parser(tokens) =
                 arg :: args
             | RightParen -> [ arg ]
             | _ -> raiseError (Some afterIdent) "Expect ')' after arguments."
-        | _ -> raiseError (Some next) "Expect ')' or argument."
 
     and unary () : Expr =
         let op = peek ()
@@ -361,7 +359,7 @@ type Parser(tokens) =
                     let right = nextPrec ()
                     go (cons (left, (operator, op), right))
                 | None -> left
-            | _ -> left
+            | None -> left
 
         go <| nextPrec ()
 
