@@ -45,23 +45,38 @@ type Interpreter(env) =
 
     let call token literal args =
         match literal with
-        | Literal.Function (_, arity, env, fn) when List.length args = arity -> fn args env
-        | Literal.Function (_, arity, _, _) ->
+        | Literal.Function (LoxFunction (_, arity, env, fn)) when List.length args = arity -> fn args env
+        | Literal.Function (LoxFunction (_, arity, _, _)) ->
             runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
-        | Literal.Class (klass) -> Literal.Instance(klass, Dictionary())
+        | Literal.Class (``class``) -> Literal.Instance(``class``, Dictionary())
         | _ -> typeError "function" literal token.Line
 
     let getProperty obj name =
         match obj with
-        | Instance (_, props) ->
+        | Instance (LoxClass (_, methods, _), props) ->
             match props.TryGetValue(name.Lexeme) with
             | true, v -> v
-            | false, _ -> runtimeError $"Undefined property '%s{name.Lexeme}'." name.Line
+            | false, _ ->
+                match methods.TryGetValue(name.Lexeme) with
+                | true, LoxFunction (fnName, arity, env, fn) ->
+                    let env = Environment(Map.empty :: env)
+
+                    env.Define(
+                        { Lexeme = "this"
+                          Type = TokenType.This
+                          Line = name.Line },
+                        obj
+                    )
+
+                    Literal.Function(LoxFunction(fnName, arity, env.Get(), fn))
+                | false, _ -> runtimeError $"Undefined property '%s{name.Lexeme}'." name.Line
         | _ -> runtimeError "Only instances have properties." name.Line
 
     let rec evaluate =
         function
         | Literal v -> v
+
+        | This token -> env.Get(token)
 
         | Variable token -> env.Get(token)
 
@@ -152,6 +167,16 @@ type Interpreter(env) =
                 value
             | _ -> runtimeError "Only instances have fields." name.Line
 
+    let fnWrap ``params`` body (args: list<Literal>) (env: Ast.Environment) =
+        let newEnv = Environment(Map.empty :: env)
+        List.iter2 (fun p a -> newEnv.Define(p, a)) ``params`` args
+
+        try
+            Interpreter(newEnv).Execute(body)
+            Nil
+        with
+        | Return (_, value) -> value
+
     member private this.Execute =
         function
         | If (cond, thenBranch, elseBranch) ->
@@ -178,20 +203,13 @@ type Interpreter(env) =
             |> Option.map evaluate
             |> Option.defaultValue Nil
             |> (fun v -> env.Define(token, v))
-        | Function (Function.Function (token, ``params``, body)) ->
-            let call (args: list<Literal>) (env: Ast.Environment) =
-                let newEnv = Environment(Map.empty :: env)
-                List.iter2 (fun p a -> newEnv.Define(p, a)) ``params`` args
-
-                try
-                    Interpreter(newEnv).Execute(body)
-                    Nil
-                with
-                | Return (token, value) -> value
-
+        | Function (StmtFunction (token, ``params``, body)) ->
             env.Define(token, Nil)
 
-            env.Assign(token, Literal.Function(token.Lexeme, List.length ``params``, env.Get(), call))
+            env.Assign(
+                token,
+                Literal.Function(LoxFunction(token.Lexeme, List.length ``params``, env.Get(), fnWrap ``params`` body))
+            )
             |> ignore
         | Block statements ->
             env.Push()
@@ -200,10 +218,18 @@ type Interpreter(env) =
                 this.Execute(statement)
 
             env.Pop()
-        | Class (token, methods) ->
+        | Class (token, classMethods) ->
             env.Define(token, Nil)
 
-            env.Assign(token, Literal.Class(Class.Class(token.Lexeme, env.Get())))
+            let methods = Dictionary<string, LoxFunction>()
+
+            for StmtFunction (token, ``params``, body) in classMethods do
+                let method: LoxFunction =
+                    LoxFunction(token.Lexeme, List.length ``params``, env.Get(), fnWrap ``params`` body)
+
+                methods.TryAdd(token.Lexeme, method) |> ignore
+
+            env.Assign(token, Literal.Class(LoxClass(token.Lexeme, methods, env.Get())))
             |> ignore
 
     new() = Interpreter(Environment())

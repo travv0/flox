@@ -5,14 +5,14 @@ open System
 open Token
 open System.Collections.Generic
 
-[<Struct>]
+[<Struct; NoComparison; NoEquality>]
 type Literal =
     | Bool of bool: bool
     | String of str: string
     | Number of num: float
-    | Function of name: string * arity: int * env: Environment * fn: (list<Literal> -> Environment -> Literal)
-    | Class of classClass: Class
-    | Instance of instanceClass: Class * Dictionary<string, Literal>
+    | Function of LoxFunction
+    | Class of classClass: LoxClass
+    | Instance of instanceClass: LoxClass * Dictionary<string, Literal>
     | Nil
 
     override this.ToString() =
@@ -21,9 +21,9 @@ type Literal =
         | Bool false -> "false"
         | String s -> $"\"%s{s}\""
         | Number n -> string n
-        | Function (name, _, _, _) -> $"<fn %s{name}>"
-        | Class (Class.Class (name, _)) -> $"<class %s{name}>"
-        | Instance (Class.Class (name, _), _) -> $"<instance %s{name}>"
+        | Function (LoxFunction (name, _, _, _)) -> $"<fn %s{name}>"
+        | Class (LoxClass (name, _, _)) -> $"<class %s{name}>"
+        | Instance (LoxClass (name, _, _), _) -> $"<instance %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -33,9 +33,12 @@ type Literal =
 
 and Environment = list<Map<string, ref<Literal>>>
 
-and Class = Class of string * Environment
+and [<Struct; NoComparison; NoEquality>] LoxClass = LoxClass of string * Dictionary<string, LoxFunction> * Environment
 
-[<Struct>]
+and [<Struct; NoComparison; NoEquality>] LoxFunction =
+    | LoxFunction of name: string * arity: int * env: Environment * fn: (list<Literal> -> Environment -> Literal)
+
+[<Struct; NoComparison>]
 type BinaryOp =
     | Plus
     | BangEqual
@@ -49,8 +52,8 @@ type BinaryOp =
     | LessEqual
 
 module BinaryOp =
-    let ofToken { Type = type_ } =
-        match type_ with
+    let ofToken { Type = ``type`` } =
+        match ``type`` with
         | TokenType.BangEqual -> Some BangEqual
         | TokenType.EqualEqual -> Some EqualEqual
         | TokenType.Greater -> Some Greater
@@ -63,14 +66,14 @@ module BinaryOp =
         | TokenType.Star -> Some Star
         | _ -> None
 
-[<Struct>]
+[<Struct; NoComparison>]
 type LogicalOp =
     | And
     | Or
 
 module LogicalOp =
-    let ofToken { Type = type_ } =
-        match type_ with
+    let ofToken { Type = ``type`` } =
+        match ``type`` with
         | TokenType.And -> Some And
         | TokenType.Or -> Some Or
         | _ -> None
@@ -80,7 +83,7 @@ type UnaryOp =
     | Minus
     | Bang
 
-[<CustomEquality; NoComparison>]
+[<NoComparison; NoEquality>]
 type Expr =
     | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
@@ -88,23 +91,22 @@ type Expr =
     | Get of Expr * Token
     | Logical of Expr * (Token * LogicalOp) * Expr
     | Set of Expr * Token * Expr
+    | This of Token
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal
     | Variable of Token
     | Grouping of Expr
 
-    interface IEquatable<Expr> with
-        member this.Equals(other) = obj.ReferenceEquals(this, other)
-
-type Function = Function of Token * list<Token> * Stmt
+[<Struct; NoEquality; NoComparison>]
+type StmtFunction = StmtFunction of Token * list<Token> * Stmt
 
 and Stmt =
     | Expression of Expr
-    | Function of Function
+    | Function of StmtFunction
     | If of Expr * Stmt * option<Stmt>
     | Print of Expr
     | Return of Token * option<Expr>
     | Var of Token * option<Expr>
     | While of Expr * Stmt
     | Block of list<Stmt>
-    | Class of Token * list<Function>
+    | Class of Token * list<StmtFunction>

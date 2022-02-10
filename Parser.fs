@@ -32,10 +32,10 @@ type Parser(tokens) =
         | [ _ ], rest -> tokens <- rest
         | _ -> raiseError None "Unexpected end of file"
 
-    let consume type_ message : unit =
+    let consume ``type`` message : unit =
         let token = parseOne ()
 
-        if token.Type <> type_ then
+        if token.Type <> ``type`` then
             raiseError (Some token) message
 
     let peek () =
@@ -125,20 +125,20 @@ type Parser(tokens) =
         consume RightBrace "Expect '}' after class body."
         Class(name, mthds)
 
-    and methods () : list<Function> =
+    and methods () : list<StmtFunction> =
         match (peek ()).Type with
         | RightBrace -> []
         | Eof -> []
         | _ -> funDeclaration "method" :: methods ()
 
-    and funDeclaration (kind: string) : Function =
+    and funDeclaration (kind: string) : StmtFunction =
         let identifier =
             parse [ Identifier ] $"Expect %s{kind} name."
 
         consume LeftParen $"Expect '(' after %s{kind} name."
         let ``params`` = parameters ()
         consume LeftBrace $"Expect '{{' before %s{kind} body."
-        Function.Function(identifier, ``params``, block ())
+        StmtFunction(identifier, ``params``, block ())
 
     and parameters () : list<Token> =
         let next = parseOne ()
@@ -303,6 +303,7 @@ type Parser(tokens) =
         | TokenType.Nil -> Literal Nil
         | TokenType.String s -> Literal(String s)
         | TokenType.Number n -> Literal(Number n)
+        | TokenType.This -> This(token)
         | TokenType.Identifier -> Variable token
         | TokenType.LeftParen ->
             let expr = expression ()
