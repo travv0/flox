@@ -27,8 +27,8 @@ type Literal =
         | String s -> $"\"%s{s}\""
         | Number n -> string n
         | Function (LoxFunction (name, _, _, _, _)) -> $"<fn %s{name}>"
-        | Class (LoxClass (name, _, _)) -> $"<class %s{name}>"
-        | Instance (LoxClass (name, _, _), _) -> $"<instance %s{name}>"
+        | Class (LoxClass (name, _, _, _)) -> $"<class %s{name}>"
+        | Instance (LoxClass (name, _, _, _), _) -> $"<instance %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -38,7 +38,8 @@ type Literal =
 
 and Environment = list<Map<string, ref<Literal>>>
 
-and [<Struct; NoComparison; NoEquality>] LoxClass = LoxClass of string * Dictionary<string, LoxFunction> * Environment
+and [<NoComparison; NoEquality>] LoxClass =
+    | LoxClass of string * option<LoxClass> * Dictionary<string, LoxFunction> * Environment
 
 and [<Struct; NoComparison; NoEquality>] LoxFunction =
     | LoxFunction of
@@ -119,4 +120,4 @@ and Stmt =
     | Var of Token * option<Expr>
     | While of Expr * Stmt
     | Block of list<Stmt>
-    | Class of Token * list<StmtFunction>
+    | Class of Token * option<Expr> * list<StmtFunction>

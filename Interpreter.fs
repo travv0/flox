@@ -45,7 +45,7 @@ type Interpreter(env) =
 
     let getMethod obj name line : option<LoxFunction> =
         match obj with
-        | Instance (LoxClass (_, methods, _), props) ->
+        | Instance (LoxClass (_, superclass, methods, _), props) ->
             match methods.TryGetValue(name) with
             | true, LoxFunction (fnName, arity, ``type``, env, fn) ->
                 let env = Environment(Map.empty :: env)
@@ -59,7 +59,10 @@ type Interpreter(env) =
 
                 LoxFunction(fnName, arity, ``type``, env.Get(), fn)
                 |> Some
-            | false, _ -> None
+            | false, _ ->
+                match superclass with
+                | Some superclass -> 
+                | None -> None
         | _ -> runtimeError "Only instances have methods." line
 
     let getProperty obj name =
@@ -83,7 +86,7 @@ type Interpreter(env) =
             | _ -> fn args env
         | Literal.Function (LoxFunction (_, arity, _, _, _)) ->
             runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
-        | Literal.Class (``class``) ->
+        | Literal.Class ``class`` ->
             let instance =
                 Literal.Instance(``class``, Dictionary())
 
@@ -249,28 +252,38 @@ type Interpreter(env) =
                 this.Execute(statement)
 
             env.Pop()
-        | Class (token, classMethods) ->
-            env.Define(token, Nil)
+        | Class (token, superclass, classMethods) ->
+            let go superclass =
+                env.Define(token, Nil)
 
-            let methods = Dictionary<string, LoxFunction>()
+                let methods = Dictionary<string, LoxFunction>()
 
-            for StmtFunction (token, ``params``, body) in classMethods do
-                let method: LoxFunction =
-                    LoxFunction(
-                        token.Lexeme,
-                        List.length ``params``,
-                        (if token.Lexeme = "init" then
-                             Initializer
-                         else
-                             Method),
-                        env.Get(),
-                        fnWrap ``params`` body
-                    )
+                for StmtFunction (token, ``params``, body) in classMethods do
+                    let method: LoxFunction =
+                        LoxFunction(
+                            token.Lexeme,
+                            List.length ``params``,
+                            (if token.Lexeme = "init" then
+                                 Initializer
+                             else
+                                 Method),
+                            env.Get(),
+                            fnWrap ``params`` body
+                        )
 
-                methods.TryAdd(token.Lexeme, method) |> ignore
+                    methods.TryAdd(token.Lexeme, method) |> ignore
 
-            env.Assign(token, Literal.Class(LoxClass(token.Lexeme, methods, env.Get())))
-            |> ignore
+                env.Assign(token, Literal.Class(LoxClass(token.Lexeme, superclass, methods, env.Get())))
+                |> ignore
+
+            match superclass with
+            | Some expr ->
+                let superclass = evaluate expr
+
+                match superclass with
+                | Literal.Class ``class`` -> go (Some ``class``)
+                | _ -> runtimeError "Superclass must be a class." token.Line
+            | None -> go None
 
     new() = Interpreter(Environment())
 
