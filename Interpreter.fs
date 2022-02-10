@@ -139,6 +139,18 @@ type Interpreter(env) =
                 evaluate rightExpr
 
         | Get (expr, name) -> getProperty (evaluate expr) name
+        | Set (expr, name, valueExpr) ->
+            match evaluate expr with
+            | Instance (_, props) ->
+                let value = evaluate valueExpr
+
+                if props.ContainsKey(name.Lexeme) then
+                    props.[name.Lexeme] <- value
+                else
+                    props.Add(name.Lexeme, value)
+
+                value
+            | _ -> runtimeError "Only instances have fields." name.Line
 
     member private this.Execute =
         function

@@ -288,6 +288,7 @@ type Parser(tokens) =
 
             match expr with
             | Variable v -> Expr.Assign(v, value)
+            | Get (object, name) -> Expr.Set(object, name, value)
             | _ ->
                 logError (Some next) "Invalid assignment target"
                 expr
@@ -322,6 +323,8 @@ type Parser(tokens) =
 
                 go (Expr.Call(expr, next, args))
             | Dot ->
+                skipOne ()
+
                 let name =
                     parse [ Identifier ] "Expect property name after '.'."
 

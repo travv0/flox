@@ -87,6 +87,7 @@ type Expr =
     | Call of Expr * Token * list<Expr>
     | Get of Expr * Token
     | Logical of Expr * (Token * LogicalOp) * Expr
+    | Set of Expr * Token * Expr
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal
     | Variable of Token
