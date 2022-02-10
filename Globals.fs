@@ -10,6 +10,7 @@ let clock name env =
         LoxFunction(
             name,
             0,
+            FunctionType.Function,
             env,
             (fun [] env ->
                 Number

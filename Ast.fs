@@ -5,6 +5,11 @@ open System
 open Token
 open System.Collections.Generic
 
+type FunctionType =
+    | Function
+    | Method
+    | Initializer
+
 [<Struct; NoComparison; NoEquality>]
 type Literal =
     | Bool of bool: bool
@@ -21,7 +26,7 @@ type Literal =
         | Bool false -> "false"
         | String s -> $"\"%s{s}\""
         | Number n -> string n
-        | Function (LoxFunction (name, _, _, _)) -> $"<fn %s{name}>"
+        | Function (LoxFunction (name, _, _, _, _)) -> $"<fn %s{name}>"
         | Class (LoxClass (name, _, _)) -> $"<class %s{name}>"
         | Instance (LoxClass (name, _, _), _) -> $"<instance %s{name}>"
         | Nil -> "nil"
@@ -36,7 +41,12 @@ and Environment = list<Map<string, ref<Literal>>>
 and [<Struct; NoComparison; NoEquality>] LoxClass = LoxClass of string * Dictionary<string, LoxFunction> * Environment
 
 and [<Struct; NoComparison; NoEquality>] LoxFunction =
-    | LoxFunction of name: string * arity: int * env: Environment * fn: (list<Literal> -> Environment -> Literal)
+    | LoxFunction of
+        name: string *
+        arity: int *
+        fnType: FunctionType *
+        env: Environment *
+        fn: (list<Literal> -> Environment -> Literal)
 
 [<Struct; NoComparison>]
 type BinaryOp =

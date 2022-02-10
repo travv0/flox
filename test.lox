@@ -31,3 +31,12 @@ class Cake {
 var cake = Cake();
 cake.flavor = "German chocolate";
 cake.taste(); // Prints "The German chocolate cake is delicious!".
+
+class Foo {
+  init() {
+    print this;
+  }
+}
+
+var foo = Foo();
+print foo.init();

@@ -59,3 +59,14 @@ type Environment(env) =
                 | false, _ -> loop envs
 
         loop environment
+
+    member _.Get(name, line) : Literal =
+        let rec loop =
+            function
+            | ([]: Ast.Environment) -> runtimeError $"Undefined variable '%s{name}'." line
+            | env :: envs ->
+                match env.TryGetValue(name) with
+                | true, { contents = value } -> value
+                | false, _ -> loop envs
+
+        loop environment

@@ -43,13 +43,24 @@ type Interpreter(env) =
         raise
         <| RuntimeError(Some value, $"Expect %s{expected}.", line)
 
-    let call token literal args =
-        match literal with
-        | Literal.Function (LoxFunction (_, arity, env, fn)) when List.length args = arity -> fn args env
-        | Literal.Function (LoxFunction (_, arity, _, _)) ->
-            runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
-        | Literal.Class (``class``) -> Literal.Instance(``class``, Dictionary())
-        | _ -> typeError "function" literal token.Line
+    let getMethod obj name line : option<LoxFunction> =
+        match obj with
+        | Instance (LoxClass (_, methods, _), props) ->
+            match methods.TryGetValue(name) with
+            | true, LoxFunction (fnName, arity, ``type``, env, fn) ->
+                let env = Environment(Map.empty :: env)
+
+                env.Define(
+                    { Lexeme = "this"
+                      Type = TokenType.This
+                      Line = line },
+                    obj
+                )
+
+                LoxFunction(fnName, arity, ``type``, env.Get(), fn)
+                |> Some
+            | false, _ -> None
+        | _ -> runtimeError "Only instances have methods." line
 
     let getProperty obj name =
         match obj with
@@ -57,20 +68,32 @@ type Interpreter(env) =
             match props.TryGetValue(name.Lexeme) with
             | true, v -> v
             | false, _ ->
-                match methods.TryGetValue(name.Lexeme) with
-                | true, LoxFunction (fnName, arity, env, fn) ->
-                    let env = Environment(Map.empty :: env)
-
-                    env.Define(
-                        { Lexeme = "this"
-                          Type = TokenType.This
-                          Line = name.Line },
-                        obj
-                    )
-
-                    Literal.Function(LoxFunction(fnName, arity, env.Get(), fn))
-                | false, _ -> runtimeError $"Undefined property '%s{name.Lexeme}'." name.Line
+                getMethod obj name.Lexeme name.Line
+                |> Option.map Literal.Function
+                |> Option.defaultWith (fun () -> runtimeError $"No method '%s{name.Lexeme}' on object." name.Line)
         | _ -> runtimeError "Only instances have properties." name.Line
+
+    let rec call token literal args =
+        match literal with
+        | Literal.Function (LoxFunction (_, arity, ``type``, env, fn)) when List.length args = arity ->
+            match ``type`` with
+            | Initializer ->
+                fn args env |> ignore
+                Environment(env).Get("this", token.Line)
+            | _ -> fn args env
+        | Literal.Function (LoxFunction (_, arity, _, _, _)) ->
+            runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
+        | Literal.Class (``class``) ->
+            let instance =
+                Literal.Instance(``class``, Dictionary())
+
+            match getMethod instance "init" token.Line with
+            | Some (LoxFunction (_, _, _, env, initializer)) -> initializer args env
+            | None -> Nil
+            |> ignore
+
+            instance
+        | _ -> typeError "function" literal token.Line
 
     let rec evaluate =
         function
@@ -208,7 +231,15 @@ type Interpreter(env) =
 
             env.Assign(
                 token,
-                Literal.Function(LoxFunction(token.Lexeme, List.length ``params``, env.Get(), fnWrap ``params`` body))
+                Literal.Function(
+                    LoxFunction(
+                        token.Lexeme,
+                        List.length ``params``,
+                        FunctionType.Function,
+                        env.Get(),
+                        fnWrap ``params`` body
+                    )
+                )
             )
             |> ignore
         | Block statements ->
@@ -225,7 +256,16 @@ type Interpreter(env) =
 
             for StmtFunction (token, ``params``, body) in classMethods do
                 let method: LoxFunction =
-                    LoxFunction(token.Lexeme, List.length ``params``, env.Get(), fnWrap ``params`` body)
+                    LoxFunction(
+                        token.Lexeme,
+                        List.length ``params``,
+                        (if token.Lexeme = "init" then
+                             Initializer
+                         else
+                             Method),
+                        env.Get(),
+                        fnWrap ``params`` body
+                    )
 
                 methods.TryAdd(token.Lexeme, method) |> ignore
 
