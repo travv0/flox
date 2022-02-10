@@ -310,7 +310,6 @@ type Parser(tokens) =
             <<. consume TokenType.RightParen "Expect ')' after expression."
         | _ -> raiseError (Some token) "Expect expression."
 
-    // TODO refactor
     and call () : Expr =
         let rec go expr =
             let next = peek ()
@@ -322,19 +321,14 @@ type Parser(tokens) =
                     arguments ()
 
                 go (Expr.Call(expr, next, args))
+            | Dot ->
+                let name =
+                    parse [ Identifier ] "Expect property name after '.'."
+
+                go (Expr.Get(expr, name))
             | _ -> expr
 
-        let expr = primary ()
-        let next = peek ()
-
-        match next.Type with
-        | LeftParen ->
-            let args =
-                skipOne ()
-                arguments ()
-
-            go (Expr.Call(expr, next, args))
-        | _ -> expr
+        primary () |> go
 
     and arguments () : list<Expr> =
         let next = peek ()

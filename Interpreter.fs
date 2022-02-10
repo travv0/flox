@@ -5,6 +5,7 @@ open System
 open Token
 open Ast
 open Error
+open System.Collections.Generic
 
 type private Environment = Environment.Environment
 
@@ -47,8 +48,16 @@ type Interpreter(env) =
         | Literal.Function (_, arity, env, fn) when List.length args = arity -> fn args env
         | Literal.Function (_, arity, _, _) ->
             runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
-        | Literal.Class (klass) -> Literal.Instance(klass)
+        | Literal.Class (klass) -> Literal.Instance(klass, Dictionary())
         | _ -> typeError "function" literal token.Line
+
+    let getProperty obj name =
+        match obj with
+        | Instance (_, props) ->
+            match props.TryGetValue(name.Lexeme) with
+            | true, v -> v
+            | false, _ -> runtimeError $"Undefined property '%s{name.Lexeme}'." name.Line
+        | _ -> runtimeError "Only instances have properties." name.Line
 
     let rec evaluate =
         function
@@ -128,6 +137,8 @@ type Interpreter(env) =
                 left
             else
                 evaluate rightExpr
+
+        | Get (expr, name) -> getProperty (evaluate expr) name
 
     member private this.Execute =
         function

@@ -3,6 +3,7 @@ module Ast
 open System
 
 open Token
+open System.Collections.Generic
 
 [<Struct>]
 type Literal =
@@ -11,7 +12,7 @@ type Literal =
     | Number of num: float
     | Function of name: string * arity: int * env: Environment * fn: (list<Literal> -> Environment -> Literal)
     | Class of classClass: Class
-    | Instance of instanceClass: Class
+    | Instance of instanceClass: Class * Dictionary<string, Literal>
     | Nil
 
     override this.ToString() =
@@ -22,7 +23,7 @@ type Literal =
         | Number n -> string n
         | Function (name, _, _, _) -> $"<fn %s{name}>"
         | Class (Class.Class (name, _)) -> $"<class %s{name}>"
-        | Instance (Class.Class (name, _)) -> $"<instance %s{name}>"
+        | Instance (Class.Class (name, _), _) -> $"<instance %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -84,6 +85,7 @@ type Expr =
     | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
     | Call of Expr * Token * list<Expr>
+    | Get of Expr * Token
     | Logical of Expr * (Token * LogicalOp) * Expr
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal
