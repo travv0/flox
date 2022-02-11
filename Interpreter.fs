@@ -306,7 +306,7 @@ type Interpreter(env) =
                 |> ignore
 
             match superclass with
-            | Some expr ->
+            | Some (token, expr) ->
                 let superclass = evaluate expr
 
                 match superclass with

@@ -129,4 +129,4 @@ and Stmt =
     | Var of Token * option<Expr>
     | While of Expr * Stmt
     | Block of list<Stmt>
-    | Class of Token * option<Expr> * list<StmtFunction>
+    | Class of Token * option<Token * Expr> * list<StmtFunction>

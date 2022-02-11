@@ -119,13 +119,6 @@ type private Parser(tokens) =
         Stmt.Var(identifier, value)
 
     and classDeclaration () : Stmt =
-        let checkRecursiveInheritance ``class`` superclass =
-            if ``class`` = superclass then
-                raise
-                <| parseError (Some superclass) "A class can't inherit from itself."
-            else
-                superclass
-
         let name =
             parse [ Identifier ] "Expect class name."
 
@@ -133,8 +126,7 @@ type private Parser(tokens) =
             tryParse [ TokenType.Less ]
             |> Option.map (fun _ ->
                 parse [ Identifier ] "Expect superclass name."
-                |> checkRecursiveInheritance name
-                |> Expr.Variable)
+                |> fun sc -> sc, Expr.Variable sc)
 
         consume LeftBrace "Expect '{' before class body."
         let mthds = methods ()
