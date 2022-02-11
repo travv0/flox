@@ -2,6 +2,7 @@ module Globals
 
 #nowarn "25"
 
+open Token
 open Ast
 open System
 
