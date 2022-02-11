@@ -6,7 +6,7 @@ open Ast
 
 let (.>>) a _ = a
 
-type Parser(tokens) =
+type private Parser(tokens) =
     let mutable tokens = tokens
 
     let parseError (token: option<Token>) message =
@@ -121,7 +121,8 @@ type Parser(tokens) =
     and classDeclaration () : Stmt =
         let checkRecursiveInheritance ``class`` superclass =
             if ``class`` = superclass then
-                runtimeError "A class can't inherit from itself." superclass.Line
+                raise
+                <| parseError (Some superclass) "A class can't inherit from itself."
             else
                 superclass
 
@@ -168,7 +169,8 @@ type Parser(tokens) =
                 let ``params`` = parameters ()
 
                 if List.length ``params`` >= 255 then
-                    runtimeError "Can't have more than 255 parameters." (peek ()).Line
+                    parseError (Some(peek ())) "Can't have more than 255 parameters."
+                    |> ignore
 
                 next :: ``params``
             | RightParen -> [ next ]
@@ -186,9 +188,7 @@ type Parser(tokens) =
         | TokenType.While ->
             skipOne ()
             whileStatement ()
-        | TokenType.Return ->
-            skipOne ()
-            returnStatement ()
+        | TokenType.Return -> returnStatement ()
         | TokenType.Print ->
             skipOne ()
             printStatement ()
@@ -198,16 +198,17 @@ type Parser(tokens) =
         | _ -> expressionStatement ()
 
     and returnStatement () : Stmt =
+        let keyword = parseOne ()
         let next = peek ()
 
         match next.Type with
         | Semicolon ->
             skipOne ()
-            Stmt.Return(next, None)
+            Stmt.Return(keyword, None)
         | _ ->
             let expr = expression ()
             consume Semicolon "Expect ';' after return statement."
-            Stmt.Return(next, Some expr)
+            Stmt.Return(keyword, Some expr)
 
     and ifStatement () : Stmt =
         consume LeftParen "Expect '(' after 'if'."
@@ -372,7 +373,8 @@ type Parser(tokens) =
                 let args = arguments ()
 
                 if List.length args >= 255 then
-                    runtimeError "Can't have more than 255 arguments." (peek ()).Line
+                    parseError (Some(peek ())) "Can't have more than 255 arguments."
+                    |> ignore
 
                 arg :: args
             | RightParen -> [ arg ]
@@ -437,15 +439,4 @@ type Parser(tokens) =
             | Some stmt -> stmt :: this.Parse()
             | None -> this.Parse()
 
-let parse tokens =
-    try
-        Parser(tokens).Parse()
-    with
-    | RuntimeError (value, expected, line) ->
-        match value with
-        | Some value ->
-            RuntimeError.Report(value, expected, line)
-            []
-        | None ->
-            RuntimeError.Report(expected, line)
-            []
+let parse tokens = Parser(tokens).Parse()

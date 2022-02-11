@@ -1,6 +1,7 @@
 module Extensions
 
 open System
+open System.Collections.Generic
 
 module String =
     let ofSeq source = source |> Seq.toArray |> String
@@ -20,3 +21,9 @@ module List =
             List.skip n list
         else
             []
+
+type Dictionary<'K, 'V> with
+    member this.TryFind(key) =
+        match this.TryGetValue(key) with
+        | true, v -> Some v
+        | false, _ -> None

@@ -1,7 +1,6 @@
 module Ast
 
-open System
-
+open Extensions
 open Token
 open System.Collections.Generic
 
@@ -44,9 +43,9 @@ and [<NoComparison; NoEquality>] LoxClass =
     member this.FindMethod(name) =
         let (LoxClass (_, superclass, methods, _)) = this
 
-        match methods.TryGetValue(name) with
-        | true, fn -> Some fn
-        | false, _ ->
+        match methods.TryFind(name) with
+        | Some fn -> Some fn
+        | None ->
             superclass
             |> Option.bind (fun sc -> sc.FindMethod(name))
 

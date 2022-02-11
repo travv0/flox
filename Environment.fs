@@ -28,10 +28,6 @@ type Environment(env) =
         loop ([], environment)
 
     member _.Define(token, value) : unit =
-        if List.length environment > 1
-           && Map.containsKey token.Lexeme (List.head environment) then
-            runtimeError $"Already a variable named '%s{token.Lexeme}' in this scope." token.Line
-
         match environment with
         | [] -> raise <| FatalError("No environment.")
         | env :: envs -> environment <- Map.add token.Lexeme (ref value) env :: envs
@@ -54,9 +50,9 @@ type Environment(env) =
             function
             | ([]: Ast.Environment) -> runtimeError $"Undefined variable '%s{token.Lexeme}'." token.Line
             | env :: envs ->
-                match env.TryGetValue(token.Lexeme) with
-                | true, { contents = value } -> value
-                | false, _ -> loop envs
+                match Map.tryFind token.Lexeme env with
+                | Some { contents = value } -> value
+                | None -> loop envs
 
         loop environment
 
@@ -65,8 +61,8 @@ type Environment(env) =
             function
             | ([]: Ast.Environment) -> runtimeError $"Undefined variable '%s{name}'." line
             | env :: envs ->
-                match env.TryGetValue(name) with
-                | true, { contents = value } -> value
-                | false, _ -> loop envs
+                match Map.tryFind name env with
+                | Some { contents = value } -> value
+                | None -> loop envs
 
         loop environment

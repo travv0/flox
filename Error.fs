@@ -7,6 +7,7 @@ open Ast
 module Exceptions =
     exception FatalError of string
     exception ParseError of list<Token>
+    exception AnalysisError
     exception RuntimeError of option<Literal> * string * int
 
 let printError (line: option<int>) where message =

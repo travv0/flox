@@ -27,7 +27,10 @@ let run runType source =
             if runType = Ast then
                 printfn "%A" ast
             else
-                interpreter.Interpret(ast)
+                Analyzer.analyze ast
+
+                if not (Error.Occurred()) then
+                    interpreter.Interpret(ast)
 
 let runFile runType path =
     File.ReadAllText path |> run runType

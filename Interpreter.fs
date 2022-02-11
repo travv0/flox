@@ -2,6 +2,7 @@ module Interpreter
 
 open System
 
+open Extensions
 open Token
 open Ast
 open Error
@@ -65,9 +66,9 @@ type Interpreter(env) =
     let getProperty obj name =
         match obj with
         | Instance (_, props) ->
-            match props.TryGetValue(name.Lexeme) with
-            | true, v -> v
-            | false, _ ->
+            match props.TryFind(name.Lexeme) with
+            | Some v -> v
+            | None ->
                 getMethod obj name.Lexeme name.Line
                 |> Option.map Literal.Function
                 |> Option.defaultWith (fun () -> runtimeError $"No method '%s{name.Lexeme}' on object." name.Line)
@@ -320,7 +321,6 @@ type Interpreter(env) =
             for statement in statements do
                 this.Execute(statement)
         with
-        | Return (token, _) -> RuntimeError.Report("Can't return from top-level code.", token.Line)
         | RuntimeError (value, expected, line) ->
             match value with
             | Some value -> RuntimeError.Report(value, expected, line)
