@@ -4,7 +4,7 @@ open Error
 open Token
 open Ast
 
-let (<<.) a _ = a
+let (.>>) a _ = a
 
 type Parser(tokens) =
     let mutable tokens = tokens
@@ -32,16 +32,18 @@ type Parser(tokens) =
         | [ _ ], rest -> tokens <- rest
         | _ -> raiseError None "Unexpected end of file"
 
-    let consume ``type`` message : unit =
-        let token = parseOne ()
-
-        if token.Type <> ``type`` then
-            raiseError (Some token) message
-
     let peek () =
         match tokens with
         | token :: _ -> token
         | _ -> raiseError None "Unexpected end of file."
+
+    let consume ``type`` message : unit =
+        let token = peek ()
+
+        if token.Type <> ``type`` then
+            raiseError (Some token) message
+        else
+            skipOne ()
 
     let synchronize () : unit =
         let isStatementStart token =
@@ -117,13 +119,26 @@ type Parser(tokens) =
         Stmt.Var(identifier, value)
 
     and classDeclaration () : Stmt =
+        let checkRecursiveInheritance ``class`` superclass =
+            if ``class`` = superclass then
+                runtimeError "A class can't inherit from itself." superclass.Line
+            else
+                superclass
+
         let name =
             parse [ Identifier ] "Expect class name."
+
+        let superclass =
+            tryParse [ TokenType.Less ]
+            |> Option.map (fun _ ->
+                parse [ Identifier ] "Expect superclass name."
+                |> checkRecursiveInheritance name
+                |> Expr.Variable)
 
         consume LeftBrace "Expect '{' before class body."
         let mthds = methods ()
         consume RightBrace "Expect '}' after class body."
-        Class(name, mthds)
+        Class(name, superclass, mthds)
 
     and methods () : list<StmtFunction> =
         match (peek ()).Type with
@@ -231,14 +246,14 @@ type Parser(tokens) =
             | Semicolon -> None
             | _ ->
                 Some <| expression ()
-                <<. consume Semicolon "Expect ';' after loop condition."
+                .>> consume Semicolon "Expect ';' after loop condition."
 
         let increment =
             match peek().Type with
             | RightParen -> None
             | _ ->
                 Some <| expression ()
-                <<. consume RightParen "Expect ')' after for clauses."
+                .>> consume RightParen "Expect ')' after for clauses."
 
         let body = statement ()
 
@@ -264,15 +279,15 @@ type Parser(tokens) =
             Option.iter statements.Add (declaration ())
 
         Stmt.Block(List.ofSeq statements)
-        <<. consume RightBrace "Expect '}' after block."
+        .>> consume RightBrace "Expect '}' after block."
 
     and printStatement () : Stmt =
         Stmt.Print(expression ())
-        <<. consume Semicolon "Expect ';' after value."
+        .>> consume Semicolon "Expect ';' after value."
 
     and expressionStatement () : Stmt =
         Stmt.Expression(expression ())
-        <<. consume Semicolon "Expect ';' after expression."
+        .>> consume Semicolon "Expect ';' after expression."
 
     and expression () : Expr = assignment ()
 
@@ -303,13 +318,20 @@ type Parser(tokens) =
         | TokenType.Nil -> Literal Nil
         | TokenType.String s -> Literal(String s)
         | TokenType.Number n -> Literal(Number n)
+        | TokenType.Super ->
+            consume Dot "Expect '.' after 'super'."
+
+            let method =
+                parse [ Identifier ] "Expect superclass method name."
+
+            Super(token, method)
         | TokenType.This -> This(token)
         | TokenType.Identifier -> Variable token
         | TokenType.LeftParen ->
             let expr = expression ()
 
             Grouping(expr)
-            <<. consume TokenType.RightParen "Expect ')' after expression."
+            .>> consume TokenType.RightParen "Expect ')' after expression."
         | _ -> raiseError (Some token) "Expect expression."
 
     and call () : Expr =
@@ -415,4 +437,15 @@ type Parser(tokens) =
             | Some stmt -> stmt :: this.Parse()
             | None -> this.Parse()
 
-let parse tokens = Parser(tokens).Parse()
+let parse tokens =
+    try
+        Parser(tokens).Parse()
+    with
+    | RuntimeError (value, expected, line) ->
+        match value with
+        | Some value ->
+            RuntimeError.Report(value, expected, line)
+            []
+        | None ->
+            RuntimeError.Report(expected, line)
+            []

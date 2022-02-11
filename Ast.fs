@@ -27,8 +27,8 @@ type Literal =
         | String s -> $"\"%s{s}\""
         | Number n -> string n
         | Function (LoxFunction (name, _, _, _, _)) -> $"<fn %s{name}>"
-        | Class (LoxClass (name, _, _)) -> $"<class %s{name}>"
-        | Instance (LoxClass (name, _, _), _) -> $"<instance %s{name}>"
+        | Class (LoxClass (name, _, _, _)) -> $"<class %s{name}>"
+        | Instance (LoxClass (name, _, _, _), _) -> $"<instance %s{name}>"
         | Nil -> "nil"
 
     member this.Display() =
@@ -38,7 +38,17 @@ type Literal =
 
 and Environment = list<Map<string, ref<Literal>>>
 
-and [<Struct; NoComparison; NoEquality>] LoxClass = LoxClass of string * Dictionary<string, LoxFunction> * Environment
+and [<NoComparison; NoEquality>] LoxClass =
+    | LoxClass of string * option<LoxClass> * Dictionary<string, LoxFunction> * Environment
+
+    member this.FindMethod(name) =
+        let (LoxClass (_, superclass, methods, _)) = this
+
+        match methods.TryGetValue(name) with
+        | true, fn -> Some fn
+        | false, _ ->
+            superclass
+            |> Option.bind (fun sc -> sc.FindMethod(name))
 
 and [<Struct; NoComparison; NoEquality>] LoxFunction =
     | LoxFunction of
@@ -101,6 +111,7 @@ type Expr =
     | Get of Expr * Token
     | Logical of Expr * (Token * LogicalOp) * Expr
     | Set of Expr * Token * Expr
+    | Super of Token * Token
     | This of Token
     | Unary of (Token * UnaryOp) * Expr
     | Literal of Literal
@@ -119,4 +130,4 @@ and Stmt =
     | Var of Token * option<Expr>
     | While of Expr * Stmt
     | Block of list<Stmt>
-    | Class of Token * list<StmtFunction>
+    | Class of Token * option<Expr> * list<StmtFunction>
