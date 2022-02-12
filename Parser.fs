@@ -298,7 +298,7 @@ type private Parser(tokens) =
             | Variable v -> Expr.Assign(v, value)
             | Get (object, name) -> Expr.Set(object, name, value)
             | _ ->
-                logError (Some next) "Invalid assignment target"
+                logError (Some next) "Invalid assignment target."
                 expr
         | _ -> expr
 
@@ -376,8 +376,12 @@ type private Parser(tokens) =
         let op = peek ()
 
         match op.Type with
-        | TokenType.Bang -> Unary((op, Bang), primary ())
-        | TokenType.Minus -> Unary((op, Minus), primary ())
+        | TokenType.Bang ->
+            skipOne ()
+            Unary((op, Bang), unary ())
+        | TokenType.Minus ->
+            skipOne ()
+            Unary((op, Minus), unary ())
         | _ -> call ()
 
     and bin cons ofToken nextPrec opTokens : Expr =
