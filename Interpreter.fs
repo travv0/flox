@@ -16,33 +16,30 @@ type Interpreter(env) =
     let env: Environment = env
 
     do env.DefineGlobal("clock", Globals.clock)
+    do env.DefineGlobal("listDir", Globals.listDir)
 
     let equal left right =
         match left, right with
-        | Number left, Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
-        | Number left, Number right -> left = right
-        | Bool left, Bool right -> left = right
-        | String left, String right -> left = right
-        | Nil, Nil -> true
+        | Literal.Number left, Literal.Number right when Double.IsNaN(left) && Double.IsNaN(right) -> true
+        | Literal.Number left, Literal.Number right -> left = right
+        | Literal.Bool left, Literal.Bool right -> left = right
+        | Literal.String left, Literal.String right -> left = right
+        | Literal.Nil, Literal.Nil -> true
         | _, _ -> false
 
     let notEqual left right =
         match left, right with
-        | Number left, Number right -> left <> right
-        | Bool left, Bool right -> left <> right
-        | String left, String right -> left <> right
-        | Nil, Nil -> false
+        | Literal.Number left, Literal.Number right -> left <> right
+        | Literal.Bool left, Literal.Bool right -> left <> right
+        | Literal.String left, Literal.String right -> left <> right
+        | Literal.Nil, Literal.Nil -> false
         | _, _ -> true
 
     let isTruthy =
         function
-        | Nil -> false
-        | Bool v -> v
+        | Literal.Nil -> false
+        | Literal.Bool v -> v
         | _ -> true
-
-    let typeError expected value line =
-        raise
-        <| RuntimeError(Some value, $"Expect %s{expected}.", line)
 
     let bindThis obj line (LoxFunction (fnName, arity, ``type``, env, fn)) =
         let env = Environment(Map.empty :: env)
@@ -58,14 +55,14 @@ type Interpreter(env) =
 
     let getMethod obj name line : option<LoxFunction> =
         match obj with
-        | Instance (``class``, _) ->
+        | Literal.Instance (``class``, _) ->
             ``class``.FindMethod(name)
             |> Option.map (bindThis obj line)
         | _ -> runtimeError "Only instances have methods." line
 
     let getProperty obj name =
         match obj with
-        | Instance (_, props) ->
+        | Literal.Instance (_, props) ->
             match props.TryFind(name.Lexeme) with
             | Some v -> v
             | None ->
@@ -78,10 +75,10 @@ type Interpreter(env) =
         match literal with
         | Literal.Function (LoxFunction (_, arity, ``type``, env, fn)) when List.length args = arity ->
             match ``type`` with
-            | Initializer ->
+            | FunctionType.Initializer ->
                 fn args env |> ignore
                 Environment(env).Get("this", token.Line)
-            | _ -> fn args env
+            | _ -> fn args env token.Line
         | Literal.Function (LoxFunction (_, arity, _, _, _)) ->
             runtimeError $"Expected %d{arity} arguments but got %d{List.length args}." token.Line
         | Literal.Class ``class`` ->
@@ -89,8 +86,8 @@ type Interpreter(env) =
                 Literal.Instance(``class``, Dictionary())
 
             match getMethod instance "init" token.Line with
-            | Some (LoxFunction (_, _, _, env, initializer)) -> initializer args env
-            | None -> Nil
+            | Some (LoxFunction (_, _, _, env, initializer)) -> initializer args env token.Line
+            | None -> Literal.Nil
             |> ignore
 
             instance
@@ -98,9 +95,9 @@ type Interpreter(env) =
 
     let rec evaluate =
         function
-        | Literal v -> v
+        | Expr.Literal v -> v
 
-        | Super (token, method) ->
+        | Expr.Super (token, method) ->
             match env.Get(token) with
             | Literal.Class superclass ->
                 match superclass.FindMethod(method.Lexeme) with
@@ -116,68 +113,68 @@ type Interpreter(env) =
                     Literal.Function(bindThis obj method.Line fn)
             | _ -> raise <| FatalError("Non-class is superclass.")
 
-        | This token -> env.Get(token)
+        | Expr.This token -> env.Get(token)
 
-        | Variable token -> env.Get(token)
+        | Expr.Variable token -> env.Get(token)
 
-        | Assign (token, expr) -> evaluate expr |> (fun v -> env.Assign(token, v))
+        | Expr.Assign (token, expr) -> evaluate expr |> (fun v -> env.Assign(token, v))
 
-        | Call (callee, token, argExprs) ->
+        | Expr.Call (callee, token, argExprs) ->
             let fn = evaluate callee
             let args = List.map evaluate argExprs
             call token fn args
 
-        | Grouping expr -> evaluate expr
+        | Expr.Grouping expr -> evaluate expr
 
-        | Unary (({ Line = line }, Minus), expr) ->
+        | Expr.Unary (({ Line = line }, UnaryOp.Minus), expr) ->
             match evaluate expr with
-            | Number n -> Number -n
+            | Literal.Number n -> Literal.Number -n
             | v -> typeError "number" v line
 
-        | Unary ((_, Bang), expr) ->
+        | Expr.Unary ((_, UnaryOp.Bang), expr) ->
             let right = evaluate expr
-            Bool(not (isTruthy right))
+            Literal.Bool(not (isTruthy right))
 
-        | Binary (left, ({ Line = line }, op), right) ->
+        | Expr.Binary (left, ({ Line = line }, op), right) ->
             match evaluate left, op, evaluate right with
-            | Number left, BinaryOp.Minus, Number right -> Number(left - right)
-            | Number left, Slash, Number right -> Number(left / right)
-            | Number left, Star, Number right -> Number(left * right)
+            | Literal.Number left, BinaryOp.Minus, Literal.Number right -> Literal.Number(left - right)
+            | Literal.Number left, BinaryOp.Slash, Literal.Number right -> Literal.Number(left / right)
+            | Literal.Number left, BinaryOp.Star, Literal.Number right -> Literal.Number(left * right)
 
-            | Number _, BinaryOp.Minus, badRight
-            | Number _, Slash, badRight
-            | Number _, Star, badRight -> typeError "number" badRight line
+            | Literal.Number _, BinaryOp.Minus, badRight
+            | Literal.Number _, BinaryOp.Slash, badRight
+            | Literal.Number _, BinaryOp.Star, badRight -> typeError "number" badRight line
 
             | badLeft, BinaryOp.Minus, _
-            | badLeft, Slash, _
-            | badLeft, Star, _ -> typeError "number" badLeft line
+            | badLeft, BinaryOp.Slash, _
+            | badLeft, BinaryOp.Star, _ -> typeError "number" badLeft line
 
-            | Number left, Plus, Number right -> Number(left + right)
-            | String left, Plus, String right -> String(left + right)
+            | Literal.Number left, BinaryOp.Plus, Literal.Number right -> Literal.Number(left + right)
+            | Literal.String left, BinaryOp.Plus, Literal.String right -> Literal.String(left + right)
 
-            | Number _, Plus, badRight -> typeError "number" badRight line
-            | String _, Plus, badRight -> typeError "string" badRight line
-            | badLeft, Plus, _ -> typeError "number or string" badLeft line
+            | Literal.Number _, BinaryOp.Plus, badRight -> typeError "number" badRight line
+            | Literal.String _, BinaryOp.Plus, badRight -> typeError "string" badRight line
+            | badLeft, BinaryOp.Plus, _ -> typeError "number or string" badLeft line
 
-            | Number left, Greater, Number right -> Bool(left > right)
-            | Number left, GreaterEqual, Number right -> Bool(left >= right)
-            | Number left, Less, Number right -> Bool(left < right)
-            | Number left, LessEqual, Number right -> Bool(left <= right)
+            | Literal.Number left, BinaryOp.Greater, Literal.Number right -> Literal.Bool(left > right)
+            | Literal.Number left, BinaryOp.GreaterEqual, Literal.Number right -> Literal.Bool(left >= right)
+            | Literal.Number left, BinaryOp.Less, Literal.Number right -> Literal.Bool(left < right)
+            | Literal.Number left, BinaryOp.LessEqual, Literal.Number right -> Literal.Bool(left <= right)
 
-            | Number _, Greater, badRight
-            | Number _, GreaterEqual, badRight
-            | Number _, Less, badRight
-            | Number _, LessEqual, badRight -> typeError "number" badRight line
+            | Literal.Number _, BinaryOp.Greater, badRight
+            | Literal.Number _, BinaryOp.GreaterEqual, badRight
+            | Literal.Number _, BinaryOp.Less, badRight
+            | Literal.Number _, BinaryOp.LessEqual, badRight -> typeError "number" badRight line
 
-            | badLeft, Greater, _
-            | badLeft, GreaterEqual, _
-            | badLeft, Less, _
-            | badLeft, LessEqual, _ -> typeError "number" badLeft line
+            | badLeft, BinaryOp.Greater, _
+            | badLeft, BinaryOp.GreaterEqual, _
+            | badLeft, BinaryOp.Less, _
+            | badLeft, BinaryOp.LessEqual, _ -> typeError "number" badLeft line
 
-            | left, BangEqual, right -> Bool(notEqual left right)
-            | left, EqualEqual, right -> Bool(equal left right)
+            | left, BinaryOp.BangEqual, right -> Literal.Bool(notEqual left right)
+            | left, BinaryOp.EqualEqual, right -> Literal.Bool(equal left right)
 
-        | Logical (leftExpr, ({ Line = line }, And), rightExpr) ->
+        | Expr.Logical (leftExpr, (_, LogicalOp.And), rightExpr) ->
             let left = evaluate leftExpr
 
             if isTruthy left then
@@ -185,7 +182,7 @@ type Interpreter(env) =
             else
                 left
 
-        | Logical (leftExpr, ({ Line = line }, Or), rightExpr) ->
+        | Expr.Logical (leftExpr, (_, LogicalOp.Or), rightExpr) ->
             let left = evaluate leftExpr
 
             if isTruthy left then
@@ -193,10 +190,10 @@ type Interpreter(env) =
             else
                 evaluate rightExpr
 
-        | Get (expr, name) -> getProperty (evaluate expr) name
-        | Set (expr, name, valueExpr) ->
+        | Expr.Get (expr, name) -> getProperty (evaluate expr) name
+        | Expr.Set (expr, name, valueExpr) ->
             match evaluate expr with
-            | Instance (_, props) ->
+            | Literal.Instance (_, props) ->
                 let value = evaluate valueExpr
 
                 if props.ContainsKey(name.Lexeme) then
@@ -207,44 +204,50 @@ type Interpreter(env) =
                 value
             | _ -> runtimeError "Only instances have fields." name.Line
 
-    let fnWrap ``params`` body (args: list<Literal>) (env: Ast.Environment) =
+    let fnWrap ``params`` body (args: list<Literal>) (env: Ast.Environment) _line =
         let newEnv = Environment(Map.empty :: env)
         List.iter2 (fun p a -> newEnv.Define(p, a)) ``params`` args
 
         try
             Interpreter(newEnv).Execute(body)
-            Nil
+            Literal.Nil
         with
         | Return (_, value) -> value
 
     member private this.Execute =
         function
-        | If (cond, thenBranch, elseBranch) ->
+        | Stmt.If (cond, thenBranch, elseBranch) ->
             if isTruthy (evaluate cond) then
                 this.Execute(thenBranch)
             else
                 elseBranch |> Option.iter this.Execute
-        | Expression expr -> evaluate expr |> ignore
-        | Print expr ->
+
+        | Stmt.Expression expr -> evaluate expr |> ignore
+
+        | Stmt.Print expr ->
             evaluate expr
             |> fun v -> v.Display() |> printfn "%s"
+
         | Stmt.Return (token, expr) ->
             let value =
                 expr
                 |> Option.map evaluate
-                |> Option.defaultValue Nil
+                |> Option.defaultValue Literal.Nil
 
             raise <| Return(token, value)
-        | While (cond, body) ->
+
+        | Stmt.While (cond, body) ->
             while isTruthy (evaluate cond) do
                 this.Execute(body)
-        | Var (token, binding) ->
+
+        | Stmt.Var (token, binding) ->
             binding
             |> Option.map evaluate
-            |> Option.defaultValue Nil
+            |> Option.defaultValue Literal.Nil
             |> (fun v -> env.Define(token, v))
-        | Function (StmtFunction (token, ``params``, body)) ->
-            env.Define(token, Nil)
+
+        | Stmt.Function (StmtFunction (token, ``params``, body)) ->
+            env.Define(token, Literal.Nil)
 
             env.Assign(
                 token,
@@ -259,16 +262,18 @@ type Interpreter(env) =
                 )
             )
             |> ignore
-        | Block statements ->
+
+        | Stmt.Block statements ->
             env.Push()
 
             for statement in statements do
                 this.Execute(statement)
 
             env.Pop()
-        | Class (token, superclass, classMethods) ->
+
+        | Stmt.Class (token, superclass, classMethods) ->
             let go (superclass: option<LoxClass>) =
-                env.Define(token, Nil)
+                env.Define(token, Literal.Nil)
 
                 let env =
                     superclass
@@ -293,9 +298,9 @@ type Interpreter(env) =
                             token.Lexeme,
                             List.length ``params``,
                             (if token.Lexeme = "init" then
-                                 Initializer
+                                 FunctionType.Initializer
                              else
-                                 Method),
+                                 FunctionType.Method),
                             env.Get(),
                             fnWrap ``params`` body
                         )

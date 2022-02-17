@@ -11,7 +11,7 @@ type private Parser(tokens) =
 
     let parseError (token: option<Token>) message =
         Error.Report(token, message)
-        ParseError(tokens)
+        ParseError
 
     let logError (token: option<Token>) message = parseError token message |> ignore
 
@@ -66,7 +66,7 @@ type private Parser(tokens) =
                     && not (isStatementStart token))
                 tokens
 
-        if peek().Type = Semicolon then
+        if peek().Type = TokenType.Semicolon then
             skipOne ()
 
     let parse types message =
@@ -96,68 +96,68 @@ type private Parser(tokens) =
                 classDeclaration ()
             | TokenType.Fun ->
                 skipOne ()
-                Function(funDeclaration "function")
+                Stmt.Function(funDeclaration "function")
             | _ -> statement ()
             |> Some
         with
-        | ParseError rest ->
+        | ParseError ->
             synchronize ()
             None
 
     and varDeclaration () : Stmt =
         let identifier =
-            parse [ Identifier ] "Expect variable name."
+            parse [ TokenType.Identifier ] "Expect variable name."
 
         let value =
             match peek().Type with
-            | Equal ->
+            | TokenType.Equal ->
                 skipOne ()
                 Some <| expression ()
             | _ -> None
 
-        consume Semicolon "Expect ';' after variable declaration."
+        consume TokenType.Semicolon "Expect ';' after variable declaration."
         Stmt.Var(identifier, value)
 
     and classDeclaration () : Stmt =
         let name =
-            parse [ Identifier ] "Expect class name."
+            parse [ TokenType.Identifier ] "Expect class name."
 
         let superclass =
             tryParse [ TokenType.Less ]
             |> Option.map (fun _ ->
-                parse [ Identifier ] "Expect superclass name."
+                parse [ TokenType.Identifier ] "Expect superclass name."
                 |> fun sc -> sc, Expr.Variable sc)
 
-        consume LeftBrace "Expect '{' before class body."
+        consume TokenType.LeftBrace "Expect '{' before class body."
         let mthds = methods ()
-        consume RightBrace "Expect '}' after class body."
-        Class(name, superclass, mthds)
+        consume TokenType.RightBrace "Expect '}' after class body."
+        Stmt.Class(name, superclass, mthds)
 
     and methods () : list<StmtFunction> =
         match (peek ()).Type with
-        | RightBrace -> []
-        | Eof -> []
+        | TokenType.RightBrace
+        | TokenType.Eof -> []
         | _ -> funDeclaration "method" :: methods ()
 
     and funDeclaration (kind: string) : StmtFunction =
         let identifier =
-            parse [ Identifier ] $"Expect %s{kind} name."
+            parse [ TokenType.Identifier ] $"Expect %s{kind} name."
 
-        consume LeftParen $"Expect '(' after %s{kind} name."
+        consume TokenType.LeftParen $"Expect '(' after %s{kind} name."
         let ``params`` = parameters ()
-        consume LeftBrace $"Expect '{{' before %s{kind} body."
+        consume TokenType.LeftBrace $"Expect '{{' before %s{kind} body."
         StmtFunction(identifier, ``params``, block ())
 
     and parameters () : list<Token> =
         let next = parseOne ()
 
         match next.Type with
-        | RightParen -> []
-        | Identifier ->
+        | TokenType.RightParen -> []
+        | TokenType.Identifier ->
             let afterIdent = parseOne ()
 
             match afterIdent.Type with
-            | Comma ->
+            | TokenType.Comma ->
                 let ``params`` = parameters ()
 
                 if List.length ``params`` >= 255 then
@@ -165,7 +165,7 @@ type private Parser(tokens) =
                     |> ignore
 
                 next :: ``params``
-            | RightParen -> [ next ]
+            | TokenType.RightParen -> [ next ]
             | _ -> raiseError (Some afterIdent) "Expect ')' after parameters."
         | _ -> raiseError (Some next) "Expect ')' or parameter."
 
@@ -194,23 +194,23 @@ type private Parser(tokens) =
         let next = peek ()
 
         match next.Type with
-        | Semicolon ->
+        | TokenType.Semicolon ->
             skipOne ()
             Stmt.Return(keyword, None)
         | _ ->
             let expr = expression ()
-            consume Semicolon "Expect ';' after return statement."
+            consume TokenType.Semicolon "Expect ';' after return statement."
             Stmt.Return(keyword, Some expr)
 
     and ifStatement () : Stmt =
-        consume LeftParen "Expect '(' after 'if'."
+        consume TokenType.LeftParen "Expect '(' after 'if'."
         let condition = expression ()
-        consume RightParen "Expect ')' after if condition."
+        consume TokenType.RightParen "Expect ')' after if condition."
         let thenBranch = statement ()
 
         let elseBranch =
             match peek().Type with
-            | Else ->
+            | TokenType.Else ->
                 skipOne ()
                 Some(statement ())
             | _ -> None
@@ -218,17 +218,17 @@ type private Parser(tokens) =
         Stmt.If(condition, thenBranch, elseBranch)
 
     and whileStatement () : Stmt =
-        consume LeftParen "Expect '(' after 'while'."
+        consume TokenType.LeftParen "Expect '(' after 'while'."
         let condition = expression ()
-        consume RightParen "Expect ')' after while condition."
+        consume TokenType.RightParen "Expect ')' after while condition."
         Stmt.While(condition, statement ())
 
     and forStatement () : Stmt =
-        consume LeftParen "Expect '(' after 'for'."
+        consume TokenType.LeftParen "Expect '(' after 'for'."
 
         let initializer =
             match peek().Type with
-            | Semicolon -> None
+            | TokenType.Semicolon -> None
             | TokenType.Var ->
                 skipOne ()
                 varDeclaration () |> Some
@@ -236,17 +236,17 @@ type private Parser(tokens) =
 
         let condition =
             match peek().Type with
-            | Semicolon -> None
+            | TokenType.Semicolon -> None
             | _ ->
                 Some <| expression ()
-                .>> consume Semicolon "Expect ';' after loop condition."
+                .>> consume TokenType.Semicolon "Expect ';' after loop condition."
 
         let increment =
             match peek().Type with
-            | RightParen -> None
+            | TokenType.RightParen -> None
             | _ ->
                 Some <| expression ()
-                .>> consume RightParen "Expect ')' after for clauses."
+                .>> consume TokenType.RightParen "Expect ')' after for clauses."
 
         let body = statement ()
 
@@ -257,7 +257,7 @@ type private Parser(tokens) =
 
         let body =
             match condition with
-            | None -> Stmt.While(Literal(Bool(true)), body)
+            | None -> Stmt.While(Expr.Literal(Literal.Bool(true)), body)
             | Some cond -> Stmt.While(cond, body)
 
         match initializer with
@@ -267,20 +267,20 @@ type private Parser(tokens) =
     and block () : Stmt =
         let statements = ResizeArray()
 
-        while tokens.Head.Type <> RightBrace
-              && tokens.Head.Type <> Eof do
+        while tokens.Head.Type <> TokenType.RightBrace
+              && tokens.Head.Type <> TokenType.Eof do
             Option.iter statements.Add (declaration ())
 
         Stmt.Block(List.ofSeq statements)
-        .>> consume RightBrace "Expect '}' after block."
+        .>> consume TokenType.RightBrace "Expect '}' after block."
 
     and printStatement () : Stmt =
         Stmt.Print(expression ())
-        .>> consume Semicolon "Expect ';' after value."
+        .>> consume TokenType.Semicolon "Expect ';' after value."
 
     and expressionStatement () : Stmt =
         Stmt.Expression(expression ())
-        .>> consume Semicolon "Expect ';' after expression."
+        .>> consume TokenType.Semicolon "Expect ';' after expression."
 
     and expression () : Expr = assignment ()
 
@@ -289,14 +289,14 @@ type private Parser(tokens) =
         let next = peek ()
 
         match next.Type with
-        | Equal ->
+        | TokenType.Equal ->
             let value =
                 skipOne ()
                 assignment ()
 
             match expr with
-            | Variable v -> Expr.Assign(v, value)
-            | Get (object, name) -> Expr.Set(object, name, value)
+            | Expr.Variable v -> Expr.Assign(v, value)
+            | Expr.Get (object, name) -> Expr.Set(object, name, value)
             | _ ->
                 logError (Some next) "Invalid assignment target."
                 expr
@@ -306,24 +306,24 @@ type private Parser(tokens) =
         let token = parseOne ()
 
         match token.Type with
-        | False -> Literal(Bool false)
-        | True -> Literal(Bool true)
-        | TokenType.Nil -> Literal Nil
-        | TokenType.String s -> Literal(String s)
-        | TokenType.Number n -> Literal(Number n)
+        | TokenType.False -> Expr.Literal(Literal.Bool false)
+        | TokenType.True -> Expr.Literal(Literal.Bool true)
+        | TokenType.Nil -> Expr.Literal Literal.Nil
+        | TokenType.String s -> Expr.Literal(Literal.String s)
+        | TokenType.Number n -> Expr.Literal(Literal.Number n)
         | TokenType.Super ->
-            consume Dot "Expect '.' after 'super'."
+            consume TokenType.Dot "Expect '.' after 'super'."
 
             let method =
-                parse [ Identifier ] "Expect superclass method name."
+                parse [ TokenType.Identifier ] "Expect superclass method name."
 
-            Super(token, method)
-        | TokenType.This -> This(token)
-        | TokenType.Identifier -> Variable token
+            Expr.Super(token, method)
+        | TokenType.This -> Expr.This(token)
+        | TokenType.Identifier -> Expr.Variable token
         | TokenType.LeftParen ->
             let expr = expression ()
 
-            Grouping(expr)
+            Expr.Grouping(expr)
             .>> consume TokenType.RightParen "Expect ')' after expression."
         | _ -> raiseError (Some token) "Expect expression."
 
@@ -332,17 +332,17 @@ type private Parser(tokens) =
             let next = peek ()
 
             match next.Type with
-            | LeftParen ->
+            | TokenType.LeftParen ->
                 let args =
                     skipOne ()
                     arguments ()
 
                 go (Expr.Call(expr, next, args))
-            | Dot ->
+            | TokenType.Dot ->
                 skipOne ()
 
                 let name =
-                    parse [ Identifier ] "Expect property name after '.'."
+                    parse [ TokenType.Identifier ] "Expect property name after '.'."
 
                 go (Expr.Get(expr, name))
             | _ -> expr
@@ -353,7 +353,7 @@ type private Parser(tokens) =
         let next = peek ()
 
         match next.Type with
-        | RightParen ->
+        | TokenType.RightParen ->
             skipOne ()
             []
         | _ ->
@@ -361,7 +361,7 @@ type private Parser(tokens) =
             let afterIdent = parseOne ()
 
             match afterIdent.Type with
-            | Comma ->
+            | TokenType.Comma ->
                 let args = arguments ()
 
                 if List.length args >= 255 then
@@ -369,7 +369,7 @@ type private Parser(tokens) =
                     |> ignore
 
                 arg :: args
-            | RightParen -> [ arg ]
+            | TokenType.RightParen -> [ arg ]
             | _ -> raiseError (Some afterIdent) "Expect ')' after arguments."
 
     and unary () : Expr =
@@ -378,10 +378,10 @@ type private Parser(tokens) =
         match op.Type with
         | TokenType.Bang ->
             skipOne ()
-            Unary((op, Bang), unary ())
+            Expr.Unary((op, UnaryOp.Bang), unary ())
         | TokenType.Minus ->
             skipOne ()
-            Unary((op, Minus), unary ())
+            Expr.Unary((op, UnaryOp.Minus), unary ())
         | _ -> call ()
 
     and bin cons ofToken nextPrec opTokens : Expr =
@@ -399,7 +399,7 @@ type private Parser(tokens) =
 
         go <| nextPrec ()
 
-    and binary = bin Binary BinaryOp.ofToken
+    and binary = bin Expr.Binary BinaryOp.ofToken
 
     and factor () =
         binary unary [ TokenType.Slash; TokenType.Star ]
@@ -421,7 +421,7 @@ type private Parser(tokens) =
             [ TokenType.BangEqual
               TokenType.EqualEqual ]
 
-    and logic = bin Logical LogicalOp.ofToken
+    and logic = bin Expr.Logical LogicalOp.ofToken
 
     and logicAnd () = logic equality [ TokenType.And ]
 
@@ -429,7 +429,7 @@ type private Parser(tokens) =
 
     member this.Parse() : list<Stmt> =
         match tokens with
-        | [ { Type = Eof } ] -> []
+        | [ { Type = TokenType.Eof } ] -> []
         | _ ->
             match declaration () with
             | Some stmt -> stmt :: this.Parse()

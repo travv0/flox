@@ -6,9 +6,13 @@ open Ast
 [<AutoOpen>]
 module Exceptions =
     exception FatalError of string
-    exception ParseError of list<Token>
+    exception ParseError
     exception AnalysisError
     exception RuntimeError of option<Literal> * string * int
+
+let typeError expected value line =
+    raise
+    <| RuntimeError(Some value, $"Expect %s{expected}.", line)
 
 let printError (line: option<int>) where message =
     let location =
@@ -33,7 +37,7 @@ type Error() =
     static member Report(token: option<Token>, message) =
         match token with
         | Some token ->
-            if token.Type = Eof then
+            if token.Type = TokenType.Eof then
                 report (Some token.Line) " at end" message
             else
                 report (Some token.Line) $" at '%s{token.Lexeme}'" message

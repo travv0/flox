@@ -4,12 +4,13 @@ open Extensions
 open Token
 open System.Collections.Generic
 
+[<RequireQualifiedAccess>]
 type FunctionType =
     | Function
     | Method
     | Initializer
 
-[<Struct; NoComparison; NoEquality>]
+[<Struct; NoComparison; NoEquality; RequireQualifiedAccess>]
 type Literal =
     | Bool of bool: bool
     | String of str: string
@@ -55,9 +56,9 @@ and [<Struct; NoComparison; NoEquality>] LoxFunction =
         arity: int *
         fnType: FunctionType *
         env: Environment *
-        fn: (list<Literal> -> Environment -> Literal)
+        fn: (list<Literal> -> Environment -> int -> Literal)
 
-[<Struct; NoComparison>]
+[<Struct; NoComparison; RequireQualifiedAccess>]
 type BinaryOp =
     | Plus
     | BangEqual
@@ -73,19 +74,19 @@ type BinaryOp =
 module BinaryOp =
     let ofToken { Type = ``type`` } =
         match ``type`` with
-        | TokenType.BangEqual -> Some BangEqual
-        | TokenType.EqualEqual -> Some EqualEqual
-        | TokenType.Greater -> Some Greater
-        | TokenType.GreaterEqual -> Some GreaterEqual
-        | TokenType.Less -> Some Less
-        | TokenType.LessEqual -> Some LessEqual
-        | TokenType.Minus -> Some Minus
-        | TokenType.Plus -> Some Plus
-        | TokenType.Slash -> Some Slash
-        | TokenType.Star -> Some Star
+        | TokenType.BangEqual -> Some BinaryOp.BangEqual
+        | TokenType.EqualEqual -> Some BinaryOp.EqualEqual
+        | TokenType.Greater -> Some BinaryOp.Greater
+        | TokenType.GreaterEqual -> Some BinaryOp.GreaterEqual
+        | TokenType.Less -> Some BinaryOp.Less
+        | TokenType.LessEqual -> Some BinaryOp.LessEqual
+        | TokenType.Minus -> Some BinaryOp.Minus
+        | TokenType.Plus -> Some BinaryOp.Plus
+        | TokenType.Slash -> Some BinaryOp.Slash
+        | TokenType.Star -> Some BinaryOp.Star
         | _ -> None
 
-[<Struct; NoComparison>]
+[<Struct; NoComparison; RequireQualifiedAccess>]
 type LogicalOp =
     | And
     | Or
@@ -93,16 +94,16 @@ type LogicalOp =
 module LogicalOp =
     let ofToken { Type = ``type`` } =
         match ``type`` with
-        | TokenType.And -> Some And
-        | TokenType.Or -> Some Or
+        | TokenType.And -> Some LogicalOp.And
+        | TokenType.Or -> Some LogicalOp.Or
         | _ -> None
 
-[<Struct>]
+[<Struct; RequireQualifiedAccess>]
 type UnaryOp =
     | Minus
     | Bang
 
-[<NoComparison; NoEquality>]
+[<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Expr =
     | Assign of Token * Expr
     | Binary of Expr * (Token * BinaryOp) * Expr
@@ -120,7 +121,7 @@ type Expr =
 [<Struct; NoEquality; NoComparison>]
 type StmtFunction = StmtFunction of Token * list<Token> * Stmt
 
-and Stmt =
+and [<NoComparison; NoEquality; RequireQualifiedAccess>] Stmt =
     | Expression of Expr
     | Function of StmtFunction
     | If of Expr * Stmt * option<Stmt>

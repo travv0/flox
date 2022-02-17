@@ -11,22 +11,22 @@ type private Scanner(source) =
     let mutable tokens = []
 
     let keywords =
-        Map.ofList [ "and", And
-                     "class", Class
-                     "else", Else
-                     "false", False
-                     "fun", Fun
-                     "for", For
-                     "if", If
-                     "nil", Nil
-                     "or", Or
-                     "print", Print
-                     "return", Return
-                     "super", Super
-                     "this", This
-                     "true", True
-                     "var", Var
-                     "while", While ]
+        Map.ofList [ "and", TokenType.And
+                     "class", TokenType.Class
+                     "else", TokenType.Else
+                     "false", TokenType.False
+                     "fun", TokenType.Fun
+                     "for", TokenType.For
+                     "if", TokenType.If
+                     "nil", TokenType.Nil
+                     "or", TokenType.Or
+                     "print", TokenType.Print
+                     "return", TokenType.Return
+                     "super", TokenType.Super
+                     "this", TokenType.This
+                     "true", TokenType.True
+                     "var", TokenType.Var
+                     "while", TokenType.While ]
 
     let addToken (token: TokenType) (lexeme: string) (line: int) =
         tokens <-
@@ -60,7 +60,7 @@ type private Scanner(source) =
         let tokenType =
             match Map.tryFind text keywords with
             | Some t -> t
-            | None -> Identifier
+            | None -> TokenType.Identifier
 
         addToken tokenType text line
 
@@ -80,46 +80,46 @@ type private Scanner(source) =
                 wholePart + "." + decimalPart
             | _ -> wholePart
 
-        addToken (Number(float num)) num line
+        addToken (TokenType.Number(float num)) num line
 
     let scanString () =
         let str = scanWhile ((<>) '"') |> String.ofSeq
         consume '"' "Unterminated string."
-        addToken (String str) str line
+        addToken (TokenType.String str) str line
 
     let comment () =
         source <- List.skipWhile ((<>) '\n') source
 
     let scanToken () =
         match scanOne (), source with
-        | Some '(', _ -> addToken LeftParen "(" line
-        | Some ')', _ -> addToken RightParen ")" line
-        | Some '{', _ -> addToken LeftBrace "{" line
-        | Some '}', _ -> addToken RightBrace "}" line
-        | Some ',', _ -> addToken Comma "," line
-        | Some '.', _ -> addToken Dot "." line
-        | Some '-', _ -> addToken Minus "-" line
-        | Some '+', _ -> addToken Plus "+" line
-        | Some ';', _ -> addToken Semicolon ";" line
-        | Some '*', _ -> addToken Star "*" line
+        | Some '(', _ -> addToken TokenType.LeftParen "(" line
+        | Some ')', _ -> addToken TokenType.RightParen ")" line
+        | Some '{', _ -> addToken TokenType.LeftBrace "{" line
+        | Some '}', _ -> addToken TokenType.RightBrace "}" line
+        | Some ',', _ -> addToken TokenType.Comma "," line
+        | Some '.', _ -> addToken TokenType.Dot "." line
+        | Some '-', _ -> addToken TokenType.Minus "-" line
+        | Some '+', _ -> addToken TokenType.Plus "+" line
+        | Some ';', _ -> addToken TokenType.Semicolon ";" line
+        | Some '*', _ -> addToken TokenType.Star "*" line
         | Some '!', '=' :: _ ->
             scanOne () |> ignore
-            addToken BangEqual "!=" line
-        | Some '!', _ -> addToken Bang "!" line
+            addToken TokenType.BangEqual "!=" line
+        | Some '!', _ -> addToken TokenType.Bang "!" line
         | Some '=', '=' :: _ ->
             scanOne () |> ignore
-            addToken EqualEqual "==" line
-        | Some '=', _ -> addToken Equal "=" line
+            addToken TokenType.EqualEqual "==" line
+        | Some '=', _ -> addToken TokenType.Equal "=" line
         | Some '<', '=' :: _ ->
             scanOne () |> ignore
-            addToken LessEqual "<=" line
-        | Some '<', _ -> addToken Less "<" line
+            addToken TokenType.LessEqual "<=" line
+        | Some '<', _ -> addToken TokenType.Less "<" line
         | Some '>', '=' :: _ ->
             scanOne () |> ignore
-            addToken GreaterEqual ">=" line
-        | Some '>', _ -> addToken Greater ">" line
+            addToken TokenType.GreaterEqual ">=" line
+        | Some '>', _ -> addToken TokenType.Greater ">" line
         | Some '/', '/' :: _ -> comment ()
-        | Some '/', _ -> addToken Slash "/" line
+        | Some '/', _ -> addToken TokenType.Slash "/" line
 
         | Some ' ', _
         | Some '\r', _

@@ -54,43 +54,43 @@ type private Analyzer() =
 
     let rec analyzeExpr =
         function
-        | Literal _ -> ()
+        | Expr.Literal _ -> ()
 
-        | Variable token ->
+        | Expr.Variable token ->
             if peek token = Some false then
                 analysisError token "Can't read local variable in its own initializer."
 
-        | This token ->
+        | Expr.This token ->
             if currentClass = ClassType.None then
                 analysisError token "Can't use 'this' outside of a class."
 
-        | Assign (_, binding) -> analyzeExpr binding
+        | Expr.Assign (_, binding) -> analyzeExpr binding
 
-        | Binary (left, _, right) ->
+        | Expr.Binary (left, _, right) ->
             analyzeExpr left
             analyzeExpr right
 
-        | Call (callee, _, args) ->
+        | Expr.Call (callee, _, args) ->
             analyzeExpr callee
 
             for arg in args do
                 analyzeExpr arg
 
-        | Grouping expr -> analyzeExpr expr
+        | Expr.Grouping expr -> analyzeExpr expr
 
-        | Logical (left, _, right) ->
+        | Expr.Logical (left, _, right) ->
             analyzeExpr left
             analyzeExpr right
 
-        | Unary (_, right) -> analyzeExpr right
+        | Expr.Unary (_, right) -> analyzeExpr right
 
-        | Get (obj, _) -> analyzeExpr obj
+        | Expr.Get (obj, _) -> analyzeExpr obj
 
-        | Set (obj, _, value) ->
+        | Expr.Set (obj, _, value) ->
             analyzeExpr obj
             analyzeExpr value
 
-        | Super (token, _) ->
+        | Expr.Super (token, _) ->
             if currentClass = ClassType.None then
                 analysisError token "Can't use 'super' outside of a class."
             elif currentClass <> ClassType.Subclass then
@@ -98,23 +98,23 @@ type private Analyzer() =
 
     and analyzeStmt =
         function
-        | If (cond, thenBranch, elseBranch) ->
+        | Stmt.If (cond, thenBranch, elseBranch) ->
             analyzeExpr cond
             analyzeStmt thenBranch
             Option.iter analyzeStmt elseBranch
 
-        | Var (token, binding) ->
+        | Stmt.Var (token, binding) ->
             declare token
             Option.iter analyzeExpr binding
             define token
 
-        | Function (StmtFunction (token, _, _) as fn) ->
+        | Stmt.Function (StmtFunction (token, _, _) as fn) ->
             declare token
             define token
 
             analyzeFunction fn FunctionType.Function
 
-        | Block stmts ->
+        | Stmt.Block stmts ->
             beginScope ()
 
             for statement in stmts do
@@ -122,11 +122,11 @@ type private Analyzer() =
 
             endScope ()
 
-        | Expression expr -> analyzeExpr expr
+        | Stmt.Expression expr -> analyzeExpr expr
 
-        | Print expr -> analyzeExpr expr
+        | Stmt.Print expr -> analyzeExpr expr
 
-        | Return (keyword, expr) ->
+        | Stmt.Return (keyword, expr) ->
             if currentFunction = FunctionType.None then
                 analysisError keyword "Can't return from top-level code."
 
@@ -138,11 +138,11 @@ type private Analyzer() =
                     analyzeExpr v)
                 expr
 
-        | While (cond, body) ->
+        | Stmt.While (cond, body) ->
             analyzeExpr cond
             analyzeStmt body
 
-        | Class (name, superclass, methods) ->
+        | Stmt.Class (name, superclass, methods) ->
             let enclosingClass = currentClass
             currentClass <- ClassType.Class
 
