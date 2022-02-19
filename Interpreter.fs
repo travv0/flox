@@ -76,7 +76,7 @@ type Interpreter(env) =
         | Literal.Function (LoxFunction (_, arity, ``type``, env, fn)) when List.length args = arity ->
             match ``type`` with
             | FunctionType.Initializer ->
-                fn args env |> ignore
+                fn args env token.Line |> ignore
                 Environment(env).Get("this", token.Line)
             | _ -> fn args env token.Line
         | Literal.Function (LoxFunction (_, arity, _, _, _)) ->
