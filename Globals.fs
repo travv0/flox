@@ -4,8 +4,9 @@ module Globals
 
 open System.IO
 
-open Error
 open Ast
+open Common
+open Error
 open System
 
 let clock name env =

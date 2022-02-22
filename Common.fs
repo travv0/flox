@@ -1,4 +1,4 @@
-module Extensions
+module Common
 
 open System
 open System.Collections.Generic
@@ -27,3 +27,14 @@ type Dictionary<'K, 'V> with
         match this.TryGetValue(key) with
         | true, v -> Some v
         | false, _ -> None
+
+[<AutoOpen>]
+module Operators =
+    [<RequiresExplicitTypeArguments>]
+    /// <summary>
+    /// Ignore the passed value. This is often used to throw away results of a computation.
+    /// </summary>
+    /// <param name="value">The value to ignore</param>
+    /// <typeparam name="'a">the type of value to expect, and ignore</typeparam>
+    /// <returns>unit</returns>
+    let ignore<'a> (value: 'a) = ignore<'a> value

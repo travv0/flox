@@ -9,8 +9,8 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Common.fs" />
     <Compile Include="Token.fs" />
-    <Compile Include="Extensions.fs" />
     <Compile Include="Ast.fs" />
     <Compile Include="Error.fs" />
     <Compile Include="Scanner.fs" />

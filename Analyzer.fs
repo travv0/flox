@@ -2,10 +2,10 @@ module Analyzer
 
 open System.Collections.Generic
 
-open Error
-open Extensions
-open Token
 open Ast
+open Common
+open Error
+open Token
 
 [<RequireQualifiedAccess>]
 type private FunctionType =

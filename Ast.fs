@@ -1,8 +1,9 @@
 module Ast
 
-open Extensions
-open Token
 open System.Collections.Generic
+
+open Common
+open Token
 
 [<RequireQualifiedAccess>]
 type FunctionType =

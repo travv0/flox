@@ -1,8 +1,8 @@
 module Scanner
 
-open System
+open Common
 open Error
-open Extensions
+open System
 open Token
 
 type private Scanner(source) =
@@ -42,6 +42,8 @@ type private Scanner(source) =
             line <- if c = '\n' then line + 1 else line
             Some c
         | _ -> None
+
+    let skipOne () : unit = scanOne () |> ignore<option<char>>
 
     let scanWhile (f: char -> bool) : list<char> =
         let (cs, rest) = List.splitWhile f source
@@ -103,19 +105,19 @@ type private Scanner(source) =
         | Some ';', _ -> addToken TokenType.Semicolon ";" line
         | Some '*', _ -> addToken TokenType.Star "*" line
         | Some '!', '=' :: _ ->
-            scanOne () |> ignore
+            skipOne ()
             addToken TokenType.BangEqual "!=" line
         | Some '!', _ -> addToken TokenType.Bang "!" line
         | Some '=', '=' :: _ ->
-            scanOne () |> ignore
+            skipOne ()
             addToken TokenType.EqualEqual "==" line
         | Some '=', _ -> addToken TokenType.Equal "=" line
         | Some '<', '=' :: _ ->
-            scanOne () |> ignore
+            skipOne ()
             addToken TokenType.LessEqual "<=" line
         | Some '<', _ -> addToken TokenType.Less "<" line
         | Some '>', '=' :: _ ->
-            scanOne () |> ignore
+            skipOne ()
             addToken TokenType.GreaterEqual ">=" line
         | Some '>', _ -> addToken TokenType.Greater ">" line
         | Some '/', '/' :: _ -> comment ()

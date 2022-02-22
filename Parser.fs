@@ -1,21 +1,24 @@
 module Parser
 
+open Ast
+open Common
 open Error
 open Token
-open Ast
 
 let (.>>) a _ = a
 
 type private Parser(tokens) =
     let mutable tokens = tokens
 
-    let parseError (token: option<Token>) message =
-        Error.Report(token, message)
-        ParseError
+    let reportError (token: option<Token>) message = Error.Report(token, message)
 
-    let logError (token: option<Token>) message = parseError token message |> ignore
+    let raiseError (token: option<Token>) message =
+        reportError token message
+        raise ParseError
 
-    let raiseError (token: option<Token>) message = raise <| parseError token message
+    let logError (token: option<Token>) message = reportError token message
+
+    let raiseError (token: option<Token>) message = raiseError token message
 
     let eofError () =
         raiseError None "Unexpected end of file."
@@ -161,8 +164,7 @@ type private Parser(tokens) =
                 let ``params`` = parameters ()
 
                 if List.length ``params`` >= 255 then
-                    parseError (Some(peek ())) "Can't have more than 255 parameters."
-                    |> ignore
+                    reportError (Some(peek ())) "Can't have more than 255 parameters."
 
                 next :: ``params``
             | TokenType.RightParen -> [ next ]
@@ -365,8 +367,7 @@ type private Parser(tokens) =
                 let args = arguments ()
 
                 if List.length args >= 255 then
-                    parseError (Some(peek ())) "Can't have more than 255 arguments."
-                    |> ignore
+                    reportError (Some(peek ())) "Can't have more than 255 arguments."
 
                 arg :: args
             | TokenType.RightParen -> [ arg ]

@@ -1,5 +1,7 @@
 module Token
 
+open Common
+
 [<RequireQualifiedAccess>]
 type TokenType =
     // Single-character tokens.

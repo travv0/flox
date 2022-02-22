@@ -1,12 +1,12 @@
 module Interpreter
 
 open System
-
-open Extensions
-open Token
-open Ast
-open Error
 open System.Collections.Generic
+
+open Ast
+open Common
+open Error
+open Token
 
 type private Environment = Environment.Environment
 
@@ -76,7 +76,7 @@ type Interpreter(env) =
         | Literal.Function (LoxFunction (_, arity, ``type``, env, fn)) when List.length args = arity ->
             match ``type`` with
             | FunctionType.Initializer ->
-                fn args env token.Line |> ignore
+                fn args env token.Line |> ignore<Literal>
                 Environment(env).Get("this", token.Line)
             | _ -> fn args env token.Line
         | Literal.Function (LoxFunction (_, arity, _, _, _)) ->
@@ -86,9 +86,8 @@ type Interpreter(env) =
                 Literal.Instance(``class``, Dictionary())
 
             match getMethod instance "init" token.Line with
-            | Some (LoxFunction (_, _, _, env, initializer)) -> initializer args env token.Line
-            | None -> Literal.Nil
-            |> ignore
+            | Some (LoxFunction (_, _, _, env, initializer)) -> initializer args env token.Line |> ignore<Literal>
+            | None -> ()
 
             instance
         | _ -> typeError "function" literal token.Line
@@ -222,7 +221,7 @@ type Interpreter(env) =
             else
                 elseBranch |> Option.iter this.Execute
 
-        | Stmt.Expression expr -> evaluate expr |> ignore
+        | Stmt.Expression expr -> evaluate expr |> ignore<Literal>
 
         | Stmt.Print expr ->
             evaluate expr
@@ -261,7 +260,7 @@ type Interpreter(env) =
                     )
                 )
             )
-            |> ignore
+            |> ignore<Literal>
 
         | Stmt.Block statements ->
             env.Push()
@@ -305,10 +304,11 @@ type Interpreter(env) =
                             fnWrap ``params`` body
                         )
 
-                    methods.TryAdd(token.Lexeme, method) |> ignore
+                    if not (methods.TryAdd(token.Lexeme, method)) then
+                        methods.[token.Lexeme] <- method
 
                 env.Assign(token, Literal.Class(LoxClass(token.Lexeme, superclass, methods, env.Get())))
-                |> ignore
+                |> ignore<Literal>
 
             match superclass with
             | Some (token, expr) ->

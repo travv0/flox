@@ -2,6 +2,7 @@
 module Environment
 
 open Ast
+open Common
 open Error
 open Token
 

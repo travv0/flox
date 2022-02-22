@@ -1,7 +1,8 @@
 module Error
 
-open Token
 open Ast
+open Common
+open Token
 
 [<AutoOpen>]
 module Exceptions =
